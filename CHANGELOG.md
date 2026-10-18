@@ -1,5 +1,14 @@
 # 更新日志
 
+## [0.2.5](https://github.com/open-wxa/wxa-runner/compare/v0.2.4...v0.2.5) (2026-10-18)
+
+
+### 问题修复
+
+* InnerAudioContext 能播放网络和代码包里的音频，readFile 能读代码包里的文件 ([504fd06](https://github.com/open-wxa/wxa-runner/commit/504fd0664e9f1b59043645f8f85e227130f72c14))
+* 原生音频 stop 后不再收到多余的 pause 等事件，未播放时设置 startTime 立即生效，readFile 读对代码包文件 ([aa1f34c](https://github.com/open-wxa/wxa-runner/commit/aa1f34cab5aaed3566da50b3e70be2f56ee2378c))
+* 旧版基础库上 InnerAudioContext 能播放音频、video 组件能显示 ([5f7a102](https://github.com/open-wxa/wxa-runner/commit/5f7a102940f546947c2a8b998813c44f69d6fe6c))
+
 ## [0.2.4](https://github.com/open-wxa/wxa-runner/compare/v0.2.3...v0.2.4) (2026-10-18)
 
 
