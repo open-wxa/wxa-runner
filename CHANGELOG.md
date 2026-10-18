@@ -1,5 +1,14 @@
 # 更新日志
 
+## [0.2.4](https://github.com/open-wxa/wxa-runner/compare/v0.2.3...v0.2.4) (2026-10-18)
+
+
+### 问题修复
+
+* 支持新版开发者工具（Electron）：编译器从 app.asar.unpacked 找，地区选择器的行政区划数据从 app.asar 读 ([98e6827](https://github.com/open-wxa/wxa-runner/commit/98e682789eed8d4f603738691414b5c24dc46643))
+* 新版开发者工具（Electron）上真实登录向正在运行的开发者工具要 ticket，不再用磁盘上作废的旧 ticket ([779f045](https://github.com/open-wxa/wxa-runner/commit/779f0454abeb08e8cf3e2a38fc8ca6feddbadb5b))
+* 自动化接口收到非对象消息时不再让开发服务器崩溃，命令行错误原因用双引号或不是 JSON 时也能取出 ([ae1b582](https://github.com/open-wxa/wxa-runner/commit/ae1b582804f47ee392e787f2c69e6b6c54b826b9))
+
 ## [0.2.3](https://github.com/open-wxa/wxa-runner/compare/v0.2.2...v0.2.3) (2026-10-17)
 
 
