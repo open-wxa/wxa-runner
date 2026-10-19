@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.3.2](https://github.com/open-wxa/wxa-runner/compare/v0.3.1...v0.3.2) (2026-10-19)
+
+
+### 问题修复
+
+* 压缩成一行、export 不在行首的 ES Module 也转换为 CommonJS，能正常加载 ([18b3037](https://github.com/open-wxa/wxa-runner/commit/18b3037c7f584c44814e5a0339e695453a5e68e5))
+
 ## [0.3.1](https://github.com/open-wxa/wxa-runner/compare/v0.3.0...v0.3.1) (2026-10-19)
 
 
