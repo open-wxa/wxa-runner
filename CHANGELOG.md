@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.3.1](https://github.com/open-wxa/wxa-runner/compare/v0.3.0...v0.3.1) (2026-10-19)
+
+
+### 问题修复
+
+* 逻辑层去掉真机上没有的 MutationObserver，用 core-js 2 等按它判断环境的库的小程序能启动 ([e7d8029](https://github.com/open-wxa/wxa-runner/commit/e7d8029cadd60c97d0bc50cbcaf1b6d00fd03b37))
+
 ## [0.3.0](https://github.com/open-wxa/wxa-runner/compare/v0.2.5...v0.3.0) (2026-10-18)
 
 
