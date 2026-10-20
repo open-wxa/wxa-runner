@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.5.0](https://github.com/open-wxa/wxa-runner/compare/v0.4.1...v0.5.0) (2026-10-20)
+
+
+### 新功能
+
+* 原生组件与 API 向开发者工具看齐（选视频、画布、picker、swiper 拖动） ([#51](https://github.com/open-wxa/wxa-runner/issues/51)) ([4ea9be2](https://github.com/open-wxa/wxa-runner/commit/4ea9be24e9c55f5868c73cab2fcd6a257c6ca48d))
+
 ## [0.4.1](https://github.com/open-wxa/wxa-runner/compare/v0.4.0...v0.4.1) (2026-10-20)
 
 
