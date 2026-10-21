@@ -1,8 +1,9 @@
 ---
+titleTemplate: ':title | wxa-runner'
 description: 用 Playwright 给微信小程序写 E2E 测试：安装 @open-wxa/wxa-runner-playwright，打开页面、点击、断言页面 data，mock 原生 API、拦截和断言 wx.request。
 ---
 
-# 在 Playwright 中测试
+# 用 Playwright 写微信小程序 E2E 测试
 
 用 [Playwright](https://playwright.dev/) 写小程序的 E2E 测试：在浏览器里打开小程序的页面，点击按钮，检查页面上的文字、页面的 `data`、小程序发出的请求。
 CI 里无头运行，Linux 上不需要开发者工具。

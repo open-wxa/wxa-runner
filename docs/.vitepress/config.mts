@@ -11,11 +11,13 @@ const REPO_URL = 'https://github.com/open-wxa/wxa-runner';
 
 const title = 'wxa-runner';
 const description =
-  '在浏览器里用微信官方基础库运行小程序：Chrome DevTools 调试、热更新，Playwright 无头 E2E 测试，支持原生小程序和 uni-app、Taro 编译产物';
+  '在浏览器里用微信官方基础库运行微信小程序：Playwright 无头 E2E 测试，CI 和 Linux 上不需要开发者工具；Chrome DevTools 调试、热更新。支持原生小程序和 uni-app、Taro 编译产物';
 
 export default defineConfig({
   lang: 'zh-CN',
   title,
+  // 子页标题只写「快速开始」这类泛词，搜索结果里看不出是做什么的，后面带上用途
+  titleTemplate: `:title | ${title} 微信小程序 E2E 测试`,
   description,
   base: BASE,
   cleanUrls: true,
@@ -119,8 +121,12 @@ export default defineConfig({
     logo: { light: '/logo.png', dark: '/logo-dark.png', alt: 'wxa-runner' },
 
     nav: [
-      { text: '指南', link: '/getting-started', activeMatch: '^/(getting-started|features|setup|real-login|hot-reload|cli)$' },
-      { text: '测试', link: '/testing', activeMatch: '^/(testing|test-api)$' },
+      {
+        text: '指南',
+        link: '/getting-started',
+        activeMatch: '^/(getting-started|features|vs-miniprogram-automator|uni-app|setup|real-login|hot-reload|cli|faq)$'
+      },
+      { text: '测试', link: '/testing', activeMatch: '^/(testing|ci|test-api)$' },
       {
         text: `v${pkg.version}`,
         items: [
@@ -136,7 +142,8 @@ export default defineConfig({
         text: '开始',
         items: [
           { text: '快速开始', link: '/getting-started' },
-          { text: '功能与限制', link: '/features' }
+          { text: '功能与限制', link: '/features' },
+          { text: '和 miniprogram-automator 对比', link: '/vs-miniprogram-automator' }
         ]
       },
       {
@@ -145,14 +152,17 @@ export default defineConfig({
           { text: '启动前准备（setup）', link: '/setup' },
           { text: '真实登录', link: '/real-login' },
           { text: '热更新', link: '/hot-reload' },
-          { text: '在 Playwright 中测试', link: '/testing' }
+          { text: '在 Playwright 中测试', link: '/testing' },
+          { text: '在 CI 中运行', link: '/ci' },
+          { text: 'uni-app 项目', link: '/uni-app' }
         ]
       },
       {
         text: '参考',
         items: [
           { text: '命令与环境变量', link: '/cli' },
-          { text: '测试 API', link: '/test-api' }
+          { text: '测试 API', link: '/test-api' },
+          { text: '常见问题', link: '/faq' }
         ]
       }
     ],

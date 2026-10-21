@@ -1,12 +1,12 @@
 ---
 layout: home
 title: wxa-runner
-titleTemplate: 在浏览器中运行、调试和测试微信小程序
+titleTemplate: 在浏览器里运行微信小程序，做 E2E 测试和调试
 
 hero:
   name: wxa-runner
   text: 在浏览器里<br>运行微信小程序
-  tagline: 用微信官方基础库渲染，Chrome DevTools 调试，Playwright 无头 E2E 测试
+  tagline: 用微信官方基础库渲染，Playwright 无头 E2E 测试，Chrome DevTools 调试。CI 里不装开发者工具也能跑
   image:
     light: /logo.png
     dark: /logo-dark.png
@@ -55,3 +55,11 @@ npx wxa-runner dev ./dist/dev/mp-weixin   # 原生小程序目录，或 uni-app 
 ```
 
 不替代微信开发者工具：预览、上传、真机调试仍然要用开发者工具。
+
+## 用它做什么
+
+- [用 Playwright 写微信小程序的 E2E 测试](./testing.md)：打开页面、点击、断言页面 data 和发出的请求
+- [在 CI 里跑小程序自动化测试](./ci.md)：GitHub Actions 的 Linux 机器上无头运行，不装开发者工具
+- [给 uni-app 项目写 E2E 测试](./uni-app.md)：运行 `mp-weixin` 编译产物，源码改动后热更新
+- [跳过登录、mock 原生 API 和 wx.request](./setup.md)：不用改业务代码
+- [和 miniprogram-automator 怎么选](./vs-miniprogram-automator.md)：两种小程序自动化测试方案的区别
