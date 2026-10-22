@@ -1,6 +1,6 @@
 {
   "name": "@open-wxa/wxa-runner-extractor",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Locate and extract the official WeChat mini-program base library from a local WeChat DevTools installation",
   "license": "MIT",
   "author": "open-wxa",

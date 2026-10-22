@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.6.0](https://github.com/open-wxa/wxa-runner/compare/v0.5.0...v0.6.0) (2026-10-22)
+
+
+### 新功能
+
+* 支持 Worker（wx.createWorker） ([#59](https://github.com/open-wxa/wxa-runner/issues/59)) ([f89bf3a](https://github.com/open-wxa/wxa-runner/commit/f89bf3aed0d3899d907c341399f601e2ddb252fa)), closes [#55](https://github.com/open-wxa/wxa-runner/issues/55)
+
 ## [0.5.0](https://github.com/open-wxa/wxa-runner/compare/v0.4.1...v0.5.0) (2026-10-20)
 
 
