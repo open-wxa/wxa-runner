@@ -3,6 +3,7 @@
  */
 
 import type { AppInfo } from '../types';
+import type { ConsoleReport } from './ConsoleForwarder';
 import { Host, LaunchTarget } from './Host';
 import { applyHotUpdate, HotUpdate } from './hmr';
 import { PageStackRestore } from './pageStackRestore';
@@ -15,14 +16,14 @@ async function main() {
   const info: AppInfo = await (await fetch('/__wxa__/app-info.json')).json();
   const restore = new PageStackRestore(info.appid);
 
-  connectDevServer(restore);
+  const sendReport = connectDevServer(restore);
 
   if (info.buildError) {
     new PhoneShell(root, info.device).showError(`编译失败\n\n${info.buildError}`);
     return;
   }
 
-  const host = new Host(info, root);
+  const host = new Host(info, root, sendReport);
   (window as any).__wxaHost = host;
 
   let markReady!: () => void;
@@ -86,8 +87,8 @@ function launchTarget(info: AppInfo): LaunchTarget {
   return { path: entry, query: {} };
 }
 
-/** 文件变化后热更新或整页刷新；编译出错时显示错误 */
-function connectDevServer(restore: PageStackRestore) {
+/** 文件变化后热更新或整页刷新；编译出错时显示错误。返回把报错发给开发服务器的函数 */
+function connectDevServer(restore: PageStackRestore): (report: ConsoleReport) => void {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const socket = new WebSocket(`${protocol}//${location.host}/__wxa__/ws`);
   // 连续保存时按顺序应用
@@ -101,6 +102,14 @@ function connectDevServer(restore: PageStackRestore) {
       if (host) host.shell.showError(`编译失败\n\n${message.message}`);
       else restore.reload(host);
     }
+  };
+  // 连上之前的报错（如启动时 app.js 出错）先存着
+  const pending: string[] = [];
+  socket.onopen = () => pending.splice(0).forEach(data => socket.send(data));
+  return report => {
+    const data = JSON.stringify(report);
+    if (socket.readyState === WebSocket.OPEN) socket.send(data);
+    else if (socket.readyState === WebSocket.CONNECTING) pending.push(data);
   };
 }
 

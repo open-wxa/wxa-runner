@@ -38,6 +38,7 @@
   "dependencies": {
     "@open-wxa/wxa-runner-core": "workspace:*",
     "@open-wxa/wxa-runner-extractor": "workspace:*",
+    "@vercel/detect-agent": "^1.2.7",
     "chalk": "^4.1.2",
     "commander": "^11.1.0"
   },

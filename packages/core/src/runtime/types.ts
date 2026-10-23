@@ -7,6 +7,9 @@
 
 export type FrameKind = 'service' | 'webview';
 
+/** 把浏览器里的报错转发到开发服务器的终端：errors 只转发报错，all 再加上 console.warn / console.error，false 不转发 */
+export type ForwardConsole = 'errors' | 'all' | false;
+
 /** iframe 内桥对象上供宿主回调的入口 */
 export interface FrameBridge {
   /** 系统事件，对应基础库的 WeixinJSBridge.on */
@@ -26,6 +29,9 @@ export interface HostApi {
   publish(kind: FrameKind, win: Window, event: string, data: unknown, webviewIds?: number[]): void;
   frameLoaded(kind: FrameKind, webviewId: number): void;
   reportError(kind: FrameKind, webviewId: number, error: unknown): void;
+  /** iframe 里的 console.warn / console.error，开启转发时才会调用 */
+  reportConsole(kind: FrameKind, webviewId: number, level: 'warn' | 'error', args: unknown[]): void;
+  readonly forwardConsole: ForwardConsole;
   /** 把逻辑层建的 2d、webgl 画布放进页面里对应的 wx-canvas；认不出是哪个画布时（如离屏画布）留在原处。type 是 getContext 的类型 */
   placeCanvas(canvas: HTMLCanvasElement, type: string): void;
   device: DeviceProfile;
@@ -56,6 +62,8 @@ export interface AppInfo {
   buildError?: string;
   /** 配置了 setup 文件时存在；error 是 setup 的编译错误 */
   setup?: { env: Record<string, string>; error?: string };
+  /** 没有时不转发 */
+  forwardConsole?: ForwardConsole;
 }
 
 /** 逻辑层发给 Worker 的消息（runtime/workers.ts → runtime/worker.ts） */

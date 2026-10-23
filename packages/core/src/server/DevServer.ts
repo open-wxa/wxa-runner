@@ -15,22 +15,25 @@
  *   /__wxa__/tmp               临时文件：POST ?type=png 保存，返回可直接访问的地址（GET 支持分段请求）；对该地址 HEAD 查大小、DELETE 删除
  *   /__wxa__/region/<kind>     地区选择器用的行政区划数据（districts / streets），取自本机开发者工具
  *   /__wxa__/api/*             --devtools-login：wx.login 的 code、手机号，服务市场、插件的请求转发，只允许本机访问
- *   /__wxa__/ws                文件变化通知：热更新（hot）或整页刷新（reload）
+ *   /__wxa__/ws                文件变化通知：热更新（hot）或整页刷新（reload）；开启 forwardConsole 时浏览器从这里发来报错
  *   其余路径                    小程序目录下的静态资源
  */
 
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 import http from 'http';
+import net from 'net';
+import os from 'os';
 import path from 'path';
 import express, { Express, NextFunction, Request, Response } from 'express';
 import { WebSocket, WebSocketServer } from 'ws';
 import { readRegionData, resolveBaseLib, ResolvedBaseLib, usesIsolatedContext } from '@open-wxa/wxa-runner-extractor';
 import { AppBuilder } from '../project/AppBuilder';
 import { MiniProgram } from '../project/MiniProgram';
-import type { AppInfo, DeviceProfile } from '../runtime/types';
+import type { AppInfo, DeviceProfile, ForwardConsole } from '../runtime/types';
 import { appserviceHtml, hostHtml, pluginWebviewHtml, subcontextHtml, webviewHtml, workerScript } from './html';
 import { ignoreListSourceMap } from './ignoreList';
+import { ignoreConsoleHook, printBrowserReports } from './forwardConsole';
 import { handleProxy } from './proxy';
 import { planHotUpdate } from './hmr';
 import { developerTicketSource, TicketSource } from './developerTicket';
@@ -42,8 +45,9 @@ import { ProjectWatcher, watchProject } from './watcher';
 
 export interface DevServerOptions {
   projectPath: string;
-  /** 默认 3000，传 0 使用随机端口 */
+  /** 不传时从 3000 起找空闲的端口；指定的端口被占用时启动失败；传 0 使用随机端口 */
   port?: number;
+  /** 监听地址，默认 localhost；0.0.0.0 或 :: 时局域网也能访问 */
   host?: string;
   /** 指定基础库版本，默认使用本机已安装的最新兼容版本 */
   baseLibVersion?: string;
@@ -64,6 +68,11 @@ export interface DevServerOptions {
   devtoolsLogin?: boolean;
   /** @deprecated 改名为 devtoolsLogin */
   realLogin?: boolean;
+  /**
+   * 把浏览器里的报错打印到终端：'errors' 转发运行时错误和未实现 API 的提醒，'all' 再加上 console.warn / console.error。
+   * 默认不转发；命令行默认 'errors'，检测到编程助手时 'all'
+   */
+  forwardConsole?: ForwardConsole;
   logger?: Pick<Console, 'log' | 'warn' | 'error'>;
 }
 
@@ -92,6 +101,7 @@ export class DevServer {
   private sockets: WebSocketServer | null = null;
   private watcher: ProjectWatcher | null = null;
   private address = '';
+  private lanAccess = false;
   /** 运行时生成的临时文件（canvas 导出、拍照等），随服务器进程存在 */
   private readonly tempFiles = new Map<string, Buffer>();
   private readonly devtoolsLogin: boolean;
@@ -119,8 +129,19 @@ export class DevServer {
     this.app = this.createApp();
   }
 
+  /** 本机访问的地址 */
   get url(): string {
     return this.address;
+  }
+
+  /** 局域网里其他设备访问的地址，每块网卡一个；只监听本机时为空 */
+  get networkUrls(): string[] {
+    if (!this.lanAccess) return [];
+    const { port } = new URL(this.address);
+    return Object.values(os.networkInterfaces())
+      .flat()
+      .filter(net => net && net.family === 'IPv4' && !net.internal)
+      .map(net => `http://${net!.address}:${port}`);
   }
 
   async start(): Promise<string> {
@@ -133,7 +154,13 @@ export class DevServer {
     }
 
     const server = http.createServer(this.app);
-    this.sockets = new WebSocketServer({ noServer: true });
+    // 浏览器只发来报错，单条用不了 64KB
+    this.sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
+    this.sockets.on('connection', socket => {
+      // 消息超过 maxPayload 等协议错误时 ws 会断开这个连接；没有监听器的 error 事件会让整个进程退出
+      socket.on('error', () => undefined);
+      if (this.options.forwardConsole) printBrowserReports(socket, this.logger);
+    });
     server.on('upgrade', (req, socket, head) => {
       if (req.url?.startsWith('/__wxa__/ws')) {
         this.sockets!.handleUpgrade(req, socket, head, ws => this.sockets!.emit('connection', ws, req));
@@ -143,14 +170,10 @@ export class DevServer {
     });
 
     const host = this.options.host || 'localhost';
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(this.options.port ?? 3000, host, () => resolve());
-    });
+    const port = await listen(server, this.options.port, host, this.logger);
     this.server = server;
-
-    const { port } = server.address() as { port: number };
-    this.address = `http://${host}:${port}`;
+    this.lanAccess = LOCAL_HOST_OF_ANY_ADDRESS.has(host);
+    this.address = `http://${LOCAL_HOST_OF_ANY_ADDRESS.get(host) ?? host}:${port}`;
 
     if (this.options.watch !== false) this.startWatching();
     // 启动时先取一次：新版开发者工具要先为项目开启自动化接口，第一次 wx.login 就不用等；不可用时在终端提示原因
@@ -189,7 +212,13 @@ export class DevServer {
 
     app.get('/__wxa__/app-info.json', async (_req, res) => {
       noStore(res);
-      const base = { appid: this.project.appid, baseLibVersion: this.baseLib.version, device: this.device, devtoolsLogin: this.devtoolsLogin };
+      const base = {
+        appid: this.project.appid,
+        baseLibVersion: this.baseLib.version,
+        device: this.device,
+        devtoolsLogin: this.devtoolsLogin,
+        forwardConsole: this.options.forwardConsole ?? false
+      };
       try {
         // 宿主打开小程序时先取 app-info：这时重新决定用哪些插件，之后的请求都按这个结果
         const build = await this.plugins.refresh(await this.builder.build());
@@ -288,6 +317,11 @@ export class DevServer {
       res.type('js').send(build.pageFrame);
     }));
 
+    app.get('/__wxa__/runtime/frame.js.map', (_req, res, next) => {
+      const file = path.join(this.runtimeDir(), 'frame.js.map');
+      if (!fs.existsSync(file)) return next();
+      res.type('json').send(ignoreConsoleHook(fs.readFileSync(file, 'utf8')));
+    });
     app.use('/__wxa__/runtime', express.static(this.runtimeDir(), { cacheControl: false }));
     // 基础库脚本加入 DevTools 的忽略列表，原始代码就是脚本本身（换个地址，免得和脚本混为一个文件）
     const sourceMaps = new Map<string, string>();
@@ -456,6 +490,47 @@ export class DevServer {
       if (client.readyState === WebSocket.OPEN) client.send(data);
     });
   }
+}
+
+const DEFAULT_PORT = 3000;
+/** 监听所有地址时，本机访问用的地址：0.0.0.0 只监听 IPv4，localhost 可能解析到 IPv6 的 ::1 */
+const LOCAL_HOST_OF_ANY_ADDRESS = new Map([['0.0.0.0', '127.0.0.1'], ['::', 'localhost']]);
+
+/** 开始监听，返回实际的端口。没指定端口时从 3000 起往后找空闲的，换了端口在终端提示 */
+async function listen(server: http.Server, port: number | undefined, host: string, logger: Pick<Console, 'warn'>): Promise<number> {
+  for (let candidate = port ?? DEFAULT_PORT; ; candidate++) {
+    // 系统允许别的进程单独占着本机地址上的同一端口，这时打开本机地址会进到那边
+    const taken = (LOCAL_HOST_OF_ANY_ADDRESS.has(host) && (await takenOnLoopback(candidate))) || !(await bind(server, candidate, host));
+    if (!taken) {
+      const actual = (server.address() as net.AddressInfo).port;
+      if (port === undefined && actual !== DEFAULT_PORT) logger.warn(`[wxa-runner] 端口 ${DEFAULT_PORT} 已被占用，改用 ${actual}`);
+      return actual;
+    }
+    if (port !== undefined) throw new Error(`端口 ${port} 已被占用：先关闭占用它的进程，或用 --port 换一个端口`);
+  }
+}
+
+/** 返回 false 表示端口已被占用 */
+function bind(server: net.Server, port: number, host: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const onError = (error: NodeJS.ErrnoException) => (error.code === 'EADDRINUSE' ? resolve(false) : reject(error));
+    server.once('error', onError);
+    server.listen(port, host, () => {
+      server.off('error', onError);
+      resolve(true);
+    });
+  });
+}
+
+async function takenOnLoopback(port: number): Promise<boolean> {
+  for (const address of ['127.0.0.1', '::1']) {
+    const probe = net.createServer();
+    // 没有这个地址（如关掉了 IPv6）时不算占用
+    const free = await bind(probe, port, address).catch(() => true);
+    if (!free) return true;
+    await new Promise(resolve => probe.close(resolve));
+  }
+  return false;
 }
 
 function resolveSetupFile(option: string | false | undefined, projectPath: string): string | null {

@@ -5,7 +5,9 @@
  * App/Page 的生命周期全部由官方基础库根据这个事件驱动。
  */
 
-import type { AppInfo, FrameBridge, FrameKind, HostApi, InvokeCallback } from '../types';
+import type { ConsoleLevel } from '../consoleHook';
+import type { AppInfo, ForwardConsole, FrameBridge, FrameKind, HostApi, InvokeCallback } from '../types';
+import { ConsoleForwarder, ConsoleReport } from './ConsoleForwarder';
 import { ApiContext, ApiRegistry, ApiResult, fail, ok } from './api/registry';
 import { createAudioApis } from './api/audio';
 import { createFileSystemApis } from './api/fs';
@@ -96,9 +98,14 @@ export class Host implements HostApi {
   private routeListeners: Array<(page: PageView, openType: OpenType) => void> = [];
   /** 渲染层报来的 2d、webgl 画布，按编号记下所在页面和最近的位置，供 placeCanvas 认出逻辑层的画布元素 */
   private readonly canvases = new Map<number, CanvasRecord>();
+  private readonly forwarder: ConsoleForwarder;
 
-  constructor(readonly info: AppInfo, root: HTMLElement) {
+  /** @param sendReport 把报错发给开发服务器打印到终端，见 AppInfo.forwardConsole */
+  constructor(readonly info: AppInfo, root: HTMLElement, sendReport: (report: ConsoleReport) => void = () => undefined) {
     this.device = info.device;
+    this.forwarder = new ConsoleForwarder(info.forwardConsole ?? false, sendReport, (kind, webviewId) =>
+      kind === 'service' ? this.currentPage()?.path : this.pages.get(webviewId)?.path
+    );
     this.shell = new PhoneShell(root, info.device);
     this.tabPaths = new Set((info.wxConfig.tabBar?.list || []).map((item: any) => stripHtml(item.pagePath)));
     this.storage = new MiniProgramStorage(window.localStorage, info.appid);
@@ -238,12 +245,22 @@ export class Host implements HostApi {
   reportError(kind: FrameKind, webviewId: number, error: unknown) {
     // 错误对象来自 iframe，跨 realm 的 instanceof Error 不成立；DOMException 等也不是 Error 的实例
     const err = typeof (error as Error | null)?.message === 'string' ? error as Error : null;
-    this.errors.push({
+    const report: FrameError = {
       kind,
       webviewId,
       message: err ? err.message : String(error),
       stack: typeof err?.stack === 'string' ? err.stack : undefined
-    });
+    };
+    this.errors.push(report);
+    this.forwarder.error(kind, webviewId, report.message, report.stack);
+  }
+
+  get forwardConsole(): ForwardConsole {
+    return this.forwarder.mode;
+  }
+
+  reportConsole(kind: FrameKind, webviewId: number, level: ConsoleLevel, args: unknown[]) {
+    this.forwarder.console(kind, webviewId, level, args);
   }
 
   /**
@@ -254,12 +271,9 @@ export class Host implements HostApi {
     const wx = (this.serviceWindow() as any)?.wx;
     if (from !== 'service' || typeof wx?.[api] !== 'function') return;
     if (this.errors.some(error => error.api === api)) return;
-    this.errors.push({
-      kind: 'service',
-      webviewId: 0,
-      api,
-      message: `wx.${api} 尚未实现，返回了默认成功。可以用 mock 覆盖，启动阶段就调用的要在 setup 里 mock`
-    });
+    const message = `wx.${api} 尚未实现，返回了默认成功。可以用 mock 覆盖，启动阶段就调用的要在 setup 里 mock`;
+    this.errors.push({ kind: 'service', webviewId: 0, api, message });
+    this.forwarder.warn(message);
   }
 
   // ---------------------------------------------------------------------------
