@@ -100,7 +100,35 @@ export function createNetworkApis(options: NetworkApiOptions): Record<string, Ap
           requestTaskId: id, state: 'headersReceived', header: res.header, statusCode: res.statusCode, cookies: res.cookies
         });
         // 和真机一样由 responseType 决定拿到文本还是 ArrayBuffer，与响应内容无关，拦截规则给的响应也是
-        const data = args.responseType === 'arraybuffer' ? await res.response.arrayBuffer() : await res.response.text();
+        let data: string | ArrayBuffer;
+        if (args.enableChunked && res.response.body) {
+          const reader = res.response.body.getReader();
+          const chunks: Uint8Array[] = [];
+          let length = 0;
+          try {
+            for (;;) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              chunks.push(value);
+              length += value.byteLength;
+              emit('onRequestTaskStateChange', {
+                requestTaskId: id, state: 'chunked', data: value.slice().buffer
+              });
+            }
+          } finally {
+            reader.releaseLock();
+          }
+          // success 仍返回完整响应；先拼字节再解码，避免 UTF-8 字符跨块时被破坏。
+          const bytes = new Uint8Array(length);
+          let offset = 0;
+          for (const chunk of chunks) {
+            bytes.set(chunk, offset);
+            offset += chunk.byteLength;
+          }
+          data = args.responseType === 'arraybuffer' ? bytes.buffer : new TextDecoder().decode(bytes);
+        } else {
+          data = args.responseType === 'arraybuffer' ? await res.response.arrayBuffer() : await res.response.text();
+        }
         emit('onRequestTaskStateChange', {
           requestTaskId: id, state: 'success', data, statusCode: res.statusCode, header: res.header, cookies: res.cookies, profile: {}
         });

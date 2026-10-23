@@ -8,6 +8,9 @@
  */
 
 import type { Request, Response } from 'express';
+import { Readable } from 'node:stream';
+import type { ReadableStream } from 'node:stream/web';
+import { pipeline } from 'node:stream/promises';
 
 // fetch 不允许或无意义的请求头
 const DROPPED_REQUEST_HEADERS = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'keep-alive', 'upgrade', 'expect']);
@@ -44,31 +47,52 @@ export async function handleProxy(req: Request, res: Response) {
 
   const hasBody = !['GET', 'HEAD'].includes(req.method) && Buffer.isBuffer(req.body) && req.body.length > 0;
 
-  let upstream: globalThis.Response;
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  res.once('close', cancel);
+  req.once('aborted', cancel);
+
   try {
-    upstream = await fetch(target, {
-      method: req.method,
-      headers,
-      body: hasBody ? req.body : undefined,
-      redirect: 'follow'
+    let upstream: globalThis.Response;
+    try {
+      upstream = await fetch(target, {
+        method: req.method,
+        headers,
+        body: hasBody ? req.body : undefined,
+        redirect: 'follow',
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (res.destroyed) return;
+      const cause = (error as any)?.cause?.message;
+      res.status(502).set('x-wxa-proxy-error', '1').send(cause || (error as Error).message);
+      return;
+    }
+
+    const responseHeaders: Record<string, string> = {};
+    upstream.headers.forEach((value, key) => {
+      responseHeaders[key] = value;
     });
+    const setCookies = typeof upstream.headers.getSetCookie === 'function' ? upstream.headers.getSetCookie() : [];
+
+    res.status(upstream.status);
+    upstream.headers.forEach((value, key) => {
+      if (!DROPPED_RESPONSE_HEADERS.has(key)) res.setHeader(key, value);
+    });
+    res.setHeader('x-wxa-headers', encodeURIComponent(JSON.stringify(responseHeaders)));
+    res.setHeader('x-wxa-set-cookie', encodeURIComponent(JSON.stringify(setCookies)));
+    // 不等响应结束：长连接的响应头和数据块要立即到达浏览器。
+    res.flushHeaders();
+    if (!upstream.body) {
+      res.end();
+      return;
+    }
+    await pipeline(Readable.fromWeb(upstream.body as ReadableStream), res);
   } catch (error) {
-    const cause = (error as any)?.cause?.message;
-    res.status(502).set('x-wxa-proxy-error', '1').send(cause || (error as Error).message);
-    return;
+    // 响应头已经发出，流中断时关闭连接，让客户端收到失败，而不是补发一个 502。
+    if (!res.destroyed) res.destroy(error as Error);
+  } finally {
+    res.off('close', cancel);
+    req.off('aborted', cancel);
   }
-
-  const responseHeaders: Record<string, string> = {};
-  upstream.headers.forEach((value, key) => {
-    responseHeaders[key] = value;
-  });
-  const setCookies = typeof upstream.headers.getSetCookie === 'function' ? upstream.headers.getSetCookie() : [];
-
-  res.status(upstream.status);
-  upstream.headers.forEach((value, key) => {
-    if (!DROPPED_RESPONSE_HEADERS.has(key)) res.setHeader(key, value);
-  });
-  res.setHeader('x-wxa-headers', encodeURIComponent(JSON.stringify(responseHeaders)));
-  res.setHeader('x-wxa-set-cookie', encodeURIComponent(JSON.stringify(setCookies)));
-  res.send(Buffer.from(await upstream.arrayBuffer()));
 }
