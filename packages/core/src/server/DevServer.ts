@@ -13,7 +13,9 @@
  *   /__baselib__/*             官方基础库
  *   /__wxa__/proxy/<协议>/<域名><路径>  网络代理，如 /__wxa__/proxy/https/api.example.com/a?b=1
  *   /__wxa__/mock/<协议>/<域名><路径>   被拦截的请求在 Network 面板里的地址，由 Service Worker（runtime/sw.js）返回响应
- *   /__wxa__/tmp/:session      临时文件：POST ?type=png 保存，返回可直接访问的地址（GET 支持分段请求）；对该地址 HEAD 查大小、DELETE 删除
+ *   /__wxa__/fs/<会话>          文件系统接口（FileSystemManager），每个浏览器会话一份文件，会话标识见 runtime/fileSession.ts
+ *   /__wxa__/tmp/<会话>         临时文件：POST ?type=png 保存，返回可直接访问的地址（GET 支持分段请求）；对该地址 HEAD 查大小、DELETE 删除
+ *   /__wxa__/usr/<会话>/<路径>   用户目录（USER_DATA_PATH）下的文件，image 等组件和 uploadFile 按地址读取
  *   /__wxa__/region/<kind>     地区选择器用的行政区划数据（districts / streets），取自本机开发者工具
  *   /__wxa__/api/*             --devtools-login：wx.login 的 code、手机号，服务市场、插件的请求转发，只允许本机访问
  *   /__wxa__/ws                文件变化通知：热更新（hot）或整页刷新（reload）；开启 forwardConsole 时浏览器从这里发来报错
@@ -355,48 +357,45 @@ export class DevServer {
         + 'Service Worker 没有生效（如 DevTools 勾选了 Bypass for network），看不到拦截规则给出的响应');
     });
 
-    // 每个浏览器会话只有一份 FileStore；刷新复用，不同 Playwright context 不共享状态。
-    const sessionFiles = (session: string): FileStore => {
-      if (!/^[a-z0-9-]{1,80}$/i.test(session)) throw new Error('invalid filesystem session');
+    // 每个浏览器会话一份 FileStore：刷新复用，不同的浏览器上下文（Playwright 的每个用例）互不可见。
+    // 会话标识要拼进文件地址，只接受 fileSession() 生成的格式；不合法时返回 null
+    const sessionFiles = (session: string): FileStore | null => {
+      if (!/^[a-z0-9-]{1,80}$/i.test(session)) return null;
       let files = this.fileSessions.get(session);
       if (!files) {
-        files = new FileStore();
-        files.mkdir('/__wxa__/usr/' + session, true);
-        files.mkdir('/__wxa__/tmp/' + session, true);
+        files = new FileStore([`/__wxa__/usr/${session}`, `/__wxa__/tmp/${session}`]);
         this.fileSessions.set(session, files);
       }
       return files;
     };
     app.post('/__wxa__/fs/:session', express.json({ limit: '150mb' }), (req, res) => {
+      const files = sessionFiles(req.params.session);
+      if (!files) {
+        res.status(400).json({ error: `invalid filesystem session ${req.params.session}` });
+        return;
+      }
+      // 文件不存在等是接口的正常失败，照样返回 200，免得每次失败都在浏览器控制台留下一条请求错误（基础库启动时就会探测不存在的文件）
       try {
-        const files = sessionFiles(req.params.session);
-        const args = req.body.args || {};
-        // 目录与文件路径只属于本会话；尤其不能用 .. 跨出目录或删掉会话根目录。
-        for (const key of ['filePath', 'srcPath', 'destPath', 'path', 'dirPath']) {
-          if (args[key] === undefined) continue;
-          const target = files.normalize(args[key]);
-          const roots = ['usr', 'tmp'].map(kind => `/__wxa__/${kind}/${req.params.session}`);
-          if (!roots.some(root => target === root || target.startsWith(root + '/'))) {
-            throw new Error('file path is outside this session');
-          }
-          if (req.body.operation === 'rmdir' && roots.includes(target)) throw new Error('cannot remove filesystem root');
-        }
-        res.json(files.execute(req.body.operation, args));
+        res.json({ result: files.execute(req.body.operation, req.body.args || {}) });
       } catch (error) {
-        res.status(400).json({ error: (error as Error).message });
+        res.json({ error: (error as Error).message });
       }
     });
 
     // 返回完整的 http 地址：image、video 组件只原样使用 http(s) 地址。
     app.post('/__wxa__/tmp/:session', express.raw({ type: () => true, limit: '100mb' }), (req, res) => {
       const type = String(req.query.type || 'png');
-      if (!/^[a-z0-9]+$/i.test(type) || !/^[a-z0-9-]{1,80}$/i.test(req.params.session)) {
-        res.status(400).type('text').send('invalid file type or session');
+      if (!/^[a-z0-9]+$/i.test(type)) {
+        res.status(400).type('text').send(`非法的文件类型 ${type}`);
         return;
       }
-      const name = `${randomUUID()}.${type}`;
-      const filePath = `/__wxa__/tmp/${req.params.session}/${name}`;
-      sessionFiles(req.params.session).write(filePath, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
+      const files = sessionFiles(req.params.session);
+      if (!files) {
+        res.status(400).type('text').send(`非法的会话标识 ${req.params.session}`);
+        return;
+      }
+      const filePath = `/__wxa__/tmp/${req.params.session}/${randomUUID()}.${type}`;
+      files.write(filePath, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
       res.json({ url: `${req.protocol}://${req.get('host')}${filePath}` });
     });
     app.get('/__wxa__/region/:kind', (req, res) => {

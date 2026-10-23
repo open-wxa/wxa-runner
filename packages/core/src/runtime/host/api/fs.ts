@@ -15,17 +15,22 @@ function requestFile(operation: string, args: Record<string, any>, sync: boolean
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body
-    }).then(async response => {
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || `filesystem HTTP ${response.status}`);
-      return result;
-    });
+    }).then(async response => fileResult(response.status, await response.text()));
   const request = new XMLHttpRequest();
   request.open('POST', url, false);
   request.setRequestHeader('content-type', 'application/json');
   request.send(body);
-  const result = JSON.parse(request.responseText);
-  if (request.status !== 200) throw new Error(result.error || `filesystem HTTP ${request.status}`);
+  return fileResult(request.status, request.responseText);
+}
+
+/**
+ * 服务器返回 { result } 或 { error }（文件不存在等）；会话标识不合法、请求体超过上限等请求本身的错误只有状态码
+ * @throws 文件操作失败，或请求被拒绝
+ */
+function fileResult(status: number, text: string): Record<string, any> {
+  if (status !== 200) throw new Error(`filesystem HTTP ${status}`);
+  const { result, error } = JSON.parse(text);
+  if (error) throw new Error(error);
   return result;
 }
 

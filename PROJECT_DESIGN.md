@@ -367,7 +367,7 @@ navigateTo(url)
 | map | map 组件要的定位（`private_geolocation`）和 `moveToMapLocation`，见下文「原生组件」 |
 | picker | picker 组件的选择器弹层，见下文「原生组件」 |
 | webView | web-view 组件的网页视图，见下文「原生组件」 |
-| fs | 内存文件系统（基础库会往 `http://usr/` 写运行日志）；`readFile` 读不带协议的路径时向开发服务器取代码包里的文件，`readFileSync` 只读内存文件系统 |
+| fs | 用户文件和临时文件都在开发服务器上，按浏览器会话各存一份（会话标识存在 localStorage，刷新后不变，新的浏览器上下文另起一份），`USER_DATA_PATH` 是 `/__wxa__/usr/<会话>`，image 等组件和 uploadFile 能按地址读取。基础库写死的 `http://usr/`（运行日志）落在同一会话里。`Sync` 接口用同步 XHR，其余用 fetch；文件不存在等正常失败返回 200 和 `error`，不在控制台留下请求错误。`readFile` 读不带协议的路径时向开发服务器取代码包里的文件，`readFileSync` 读不到代码包 |
 | tempFiles / savedFiles | 临时文件存到开发服务器；保存的文件：saveFile、getSavedFileList / getSavedFileInfo、removeSavedFile，见下文「原生组件」 |
 | libFiles | 渲染层按需加载基础库文件（`loadLibFilesSync`），3.3.x、3.5.x 的 video 等组件用，见下文「原生组件」 |
 | subpackages | 分包加载任务：`createLoadSubPackageTask` 同步返回 taskId，随后通过 `onLoadSubPackageTaskStateChange` 推送 `progressUpdate`、`success`，未声明的分包失败。所有分包的代码构建时已经注册，不用下载；渲染层的 `injectSubPackages` 直接成功，模板和样式已在 page-frame.js 里。分包预下载和分包异步化（跨分包组件、`require.async`）都走这里 |
@@ -453,7 +453,7 @@ setup 和测试 API 的 `mock` 都在注册表这一层覆盖原生实现。
 - **保存的文件**：`getFileInfo` 向开发服务器查临时文件的大小（不返回 digest）。`saveFile` 和真机一样把临时文件存成新文件、删掉原来的，
   新文件也在开发服务器上，image 能直接显示。保存记录写在 Storage 里，同样按 appid 隔离、整页刷新后还在；开发服务器重启后文件没了，
   记录随之失效，`getSavedFileInfo` 报文件不存在，Painter 等用它做缓存的库会重新下载。FileSystemManager 的 `saveFile`
-  指定 `filePath` 时直接失败：那是内存文件系统，存不了图片等二进制内容；`saveFileSync` 没有实现
+  指定 `filePath` 时直接失败（还没有实现）；`saveFileSync` 没有实现
 
 ### 伴生 SDK 子包
 

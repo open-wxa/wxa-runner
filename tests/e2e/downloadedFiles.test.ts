@@ -1,6 +1,6 @@
 import http from 'http';
 import type { AddressInfo } from 'net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { e2eReady, Runner, startRunner } from './runner';
 
 const PAGE_JS = `
@@ -32,7 +32,8 @@ Page({
       return { ok: true };
     } catch (error) { return { error: error.message }; }
   },
-  userPath() { return wx.env.USER_DATA_PATH; }
+  userPath() { return wx.env.USER_DATA_PATH; },
+  log(text) { wx.getLogManager({ level: 0 }).log(text); }
 });
 `;
 
@@ -258,6 +259,42 @@ describe.skipIf(!e2eReady)('下载文件的二进制读取与用户目录复制'
     }
     expect((await write).errMsg).toMatch(/:ok$/);
     expect(await call('read', filePath, 'utf8')).toEqual({ data: 'async' });
+  });
+
+  it('基础库写运行日志的 http://usr 目录照常可用，文件不存在等正常失败不产生请求错误', async () => {
+    const failedRequests: string[] = [];
+    const onResponse = (response: import('playwright').Response) => {
+      if (response.url().includes('/__wxa__/fs/') && response.status() !== 200) failedRequests.push(response.url());
+    };
+    runner.page.on('response', onResponse);
+    try {
+      // 基础库启动时会读不存在的 wxfile://ad/…，getLogManager 先 access 再 mkdir http://usr/miniprogramLog/
+      await runner.open('/?path=pages/index/index');
+      await call('log', 'hello-log');
+      await vi.waitFor(async () => {
+        const { files } = await call('callFs', 'readdir', { dirPath: 'http://usr/miniprogramLog' });
+        expect(files?.length).toBeGreaterThan(0);
+        const contents = await Promise.all(files.map((file: string) =>
+          call('callFs', 'readFile', { filePath: 'http://usr/miniprogramLog/' + file, encoding: 'utf8' })));
+        expect(contents.map(content => content.data).join('')).toContain('hello-log');
+      }, { timeout: 5000 });
+      expect((await call('callFs', 'access', { path: 'http://usr/missing' })).errMsg).toMatch(/^access:fail no such file/);
+      expect(failedRequests).toEqual([]);
+    } finally {
+      runner.page.off('response', onResponse);
+    }
+  });
+
+  it('用户目录、临时目录和它们的上级目录不能被 rmdir 删除', async () => {
+    await runner.open('/?path=pages/index/index');
+    const root = await call('userPath');
+    const filePath = root + '/keep.txt';
+    expect((await call('callFs', 'writeFile', { filePath, data: 'keep', encoding: 'utf8' })).errMsg).toMatch(/:ok$/);
+    const temporaryDir = (await download()).split('/').slice(0, -1).join('/');
+    for (const dirPath of [root, root + '/..', temporaryDir, 'http://usr/']) {
+      expect((await call('callFs', 'rmdir', { dirPath, recursive: true })).errMsg).toMatch(/^rmdir:fail operation not permitted/);
+    }
+    expect(await call('read', filePath, 'utf8')).toEqual({ data: 'keep' });
   });
 
   it('未实现的 FileSystemManager 方法不能静默当作通过', async () => {

@@ -158,4 +158,15 @@ describe('FileStore', () => {
     fs.remove('/a', { dir: true, recursive: true });
     expect(fs.stat('/a/b.txt')).toBeUndefined();
   });
+
+  it('预先创建的目录和它们的上级目录不能 rmdir，其中的子目录照常可以', () => {
+    const fs = new FileStore(['/__wxa__/usr/s1', '/__wxa__/tmp/s1']);
+    fs.mkdir('/__wxa__/usr/s1/sub');
+    for (const dirPath of ['/__wxa__/usr/s1', 'http://localhost/__wxa__/usr/s1/', '/__wxa__/usr', '/__wxa__', '/', 'http://usr/']) {
+      expect(() => fs.execute('rmdir', { dirPath, recursive: true })).toThrow('operation not permitted');
+    }
+    fs.execute('rmdir', { dirPath: '/__wxa__/usr/s1/sub' });
+    expect(fs.readdir('/__wxa__/usr/s1')).toEqual([]);
+    expect(fs.readdir('/__wxa__/tmp/s1')).toEqual([]);
+  });
 });

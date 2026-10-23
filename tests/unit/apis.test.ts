@@ -299,6 +299,29 @@ describe('文件系统', () => {
     expect(call(apis, 'stat', { path: 'http://usr/logs/1.log' }).stats).toMatchObject({ size: 5 });
     expect(call(apis, 'readdir', { dirPath: 'http://usr/logs' }).files).toEqual(['1.log']);
   });
+
+  describe('经开发服务器读写', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+    const respond = (body: string, status = 200) => {
+      vi.stubGlobal('localStorage', { getItem: () => 'session-1', setItem: () => undefined });
+      const fetchMock = vi.fn(async () => new Response(body, { status }));
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    };
+
+    it('异步接口按会话请求，文件不存在等失败从响应体的 error 取原因', async () => {
+      const fetchMock = respond(JSON.stringify({ error: 'no such file or directory http://usr/x' }));
+      expect((await call(createFileSystemApis(), 'access', { path: 'http://usr/x' })).errMsg).toBe('access:fail no such file or directory http://usr/x');
+      expect(fetchMock).toHaveBeenCalledWith('/__wxa__/fs/session-1', expect.objectContaining({ method: 'POST' }));
+    });
+
+    it('请求被拒绝（如请求体超过上限）时响应不是 JSON，报状态码', async () => {
+      respond('<!DOCTYPE html><title>PayloadTooLargeError</title>', 413);
+      expect((await call(createFileSystemApis(), 'writeFile', { filePath: 'http://usr/a', data: 'x' })).errMsg).toBe('writeFile:fail filesystem HTTP 413');
+    });
+  });
 });
 
 describe('其它 API', () => {

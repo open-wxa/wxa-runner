@@ -1,11 +1,14 @@
-/** 与 Storage 使用相同的浏览器持久范围：刷新和同上下文页面共享，新上下文独立。 */
-export const FILE_SESSION_KEY = '__wxa_file_session__';
+/**
+ * 文件会话：开发服务器上每个会话一份用户文件和临时文件（见 DevServer 的 /__wxa__/fs）。
+ * 标识和 Storage 一样存在 localStorage：刷新后不变，同一浏览器上下文的页面共用，新的上下文（Playwright 的每个用例）另起一份
+ */
+const KEY = '__wxa_file_session__';
 
 export function fileSession(): string {
-  let session = localStorage.getItem(FILE_SESSION_KEY);
-  if (!session || !/^[a-z0-9-]{1,80}$/i.test(session)) {
+  let session = localStorage.getItem(KEY);
+  if (!session) {
     session = crypto.randomUUID();
-    localStorage.setItem(FILE_SESSION_KEY, session);
+    localStorage.setItem(KEY, session);
   }
   return session;
 }

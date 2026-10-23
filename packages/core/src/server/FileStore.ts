@@ -14,6 +14,13 @@ export class FileStore {
   private readonly etagPrefix = randomUUID();
   private version = 0;
   private nodes = new Map<string, FsNode>([['/', { dir: true, data: Buffer.alloc(0), mtime: Date.now(), etag: '' }]]);
+  private readonly roots: string[];
+
+  /** @param roots 预先创建的目录（如用户目录）。rmdir 不能删除它们和它们的上级目录：删掉之后再写 USER_DATA_PATH 都会失败 */
+  constructor(roots: string[] = []) {
+    this.roots = roots.map(root => this.normalize(root));
+    for (const root of this.roots) this.mkdir(root, true);
+  }
 
   normalize(filePath: string): string {
     const stripped = String(filePath || '').replace(/^[a-z]+:\/\/[^/]*/i, '');
@@ -120,12 +127,15 @@ export class FileStore {
       case 'unlink':
         this.remove(args.filePath, { dir: false });
         return {};
-      case 'rmdir':
-        if (['/', '/__wxa__', '/__wxa__/tmp'].includes(this.normalize(args.dirPath))) {
-          throw new Error('cannot remove filesystem root');
+      case 'rmdir': {
+        const target = this.normalize(args.dirPath);
+        const prefix = target === '/' ? '/' : target + '/';
+        if (this.roots.some(root => root === target || root.startsWith(prefix))) {
+          throw new Error(`operation not permitted ${args.dirPath}`);
         }
         this.remove(args.dirPath, { dir: true, recursive: !!args.recursive });
         return {};
+      }
       default:
         throw new Error(`unsupported filesystem operation ${operation}`);
     }

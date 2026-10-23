@@ -11,6 +11,7 @@
 
 import { hookConsole } from './consoleHook';
 import { installWeixinJSContext } from './context';
+import { fileSession } from './fileSession';
 import { PROXY_PREFIX, toServerPath } from './networkPanel';
 import { installApiStubs } from './sdkStubs';
 import type { FrameBridge, FrameKind, HostApi } from './types';
@@ -26,6 +27,8 @@ const host = ((subContextId ? window.parent.parent : window.parent) as any).__wx
 const g = window as any;
 
 g.__global = g;
+// 用户目录按浏览器会话隔离（见 fileSession.ts），基础库读 __wxConfig 前换好。子上下文没有自己的 __wxConfig
+if (!subContextId) g.__wxConfig.env.USER_DATA_PATH = `${location.origin}/__wxa__/usr/${fileSession()}`;
 
 if (kind === 'service') {
   Object.assign(g, {

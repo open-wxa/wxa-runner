@@ -149,6 +149,23 @@ describe.skipIf(!ready)('DevServer', () => {
     expect((await fetch(url, { method: 'DELETE' })).status).toBe(404);
   });
 
+  it('文件接口：用户目录的文件可按地址读取，文件不存在等失败照样返回 200，会话标识不合法时返回 400', async () => {
+    const fsCall = (session: string, operation: string, args: object) =>
+      fetch(`${base}/__wxa__/fs/${session}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ operation, args })
+      });
+    const filePath = `${base}/__wxa__/usr/fs-session/a.txt`;
+    expect(await (await fsCall('fs-session', 'writeFile', { filePath, data: 'hi', encoding: 'utf8' })).json()).toEqual({ result: {} });
+    expect(await (await fetch(filePath)).text()).toBe('hi');
+
+    const missing = await fsCall('fs-session', 'access', { path: 'http://usr/missing' });
+    expect(missing.status).toBe(200);
+    expect(await missing.json()).toEqual({ error: 'no such file or directory http://usr/missing' });
+    expect((await fsCall('bad.session', 'access', { path: 'http://usr/x' })).status).toBe(400);
+  });
+
   it.skipIf(!readRegionData('districts'))('地区选择器用的行政区划数据取自本机开发者工具', async () => {
     const districts = await get('/__wxa__/region/districts');
     expect(districts.headers.get('content-type')).toContain('text/plain');
