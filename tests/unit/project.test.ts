@@ -51,14 +51,81 @@ describe('MiniProgram 项目解析', () => {
     expect(project.allPages(app)).toEqual(['pages/home/home', 'pages/list/list', 'pkg/detail/detail', 'solo/entry']);
   });
 
-  it('全局组件展开到页面：绝对路径保持不变，相对路径换算成相对页面', () => {
+  it('全局组件展开到页面，能解析到的引用都换成组件的绝对路径', () => {
     const json = project.readUnitJson('pages/home/home', app);
     expect(json.usingComponents).toEqual({
-      card: '../../components/card/card',
+      card: '/components/card/card',
       'g-button': '/components/button/button',
-      'g-rel': '../../components/rel/rel'
+      'g-rel': '/components/rel/rel'
     });
     expect(json.navigationBarTitleText).toBe('Home');
+  });
+
+  // 基础库运行时只把引用和当前路径拼在一起，不查找 miniprogram_npm、不补 /index
+  describe('组件引用解析成组件路径', () => {
+    const refs = new MiniProgram(createProject({
+      'app.json': {
+        pages: ['pages/index/index', 'pages/own/own', 'solo/entry'],
+        subPackages: [{ root: 'pkg', pages: [] }, { root: 'solo', pages: ['entry'], independent: true }],
+        usingComponents: {
+          'my-btn': 'my-ui/btn',
+          'g-dir': '/components/dir',
+          'g-missing': 'components/missing/missing',
+          'g-private': 'plugin-private://wxid/comp'
+        }
+      },
+      'pages/index/index.json': { usingComponents: { box: '../../components/box/box', 'own-npm': 'my-ui/icon', 'own-dir': '../../components/dir' } },
+      'pages/own/own.json': { usingComponents: { 'my-btn': '../../components/box/box', plugin: 'plugin://p/comp' } },
+      'solo/entry.json': {},
+      'components/box/box.json': { component: true, componentGenerics: { slotted: { default: 'my-ui/icon' }, bare: true } },
+      'components/dir/index.json': { component: true },
+      'miniprogram_npm/my-ui/btn/index.json': { component: true, usingComponents: { icon: '../icon/index' } },
+      'miniprogram_npm/my-ui/icon/index.json': { component: true },
+      'pkg/miniprogram_npm/sub-ui/index.json': { component: true }
+    }));
+    const refsApp = refs.readAppJson();
+    const using = (id: string) => refs.readUnitJson(id, refsApp).usingComponents;
+
+    it('全局按包名引用的 npm 组件在页面和组件里都能用，组件被收集到', () => {
+      expect(using('pages/index/index')['my-btn']).toBe('/miniprogram_npm/my-ui/btn/index');
+      expect(using('components/box/box')['my-btn']).toBe('/miniprogram_npm/my-ui/btn/index');
+      expect(refs.collectUnits(refsApp).components).toContain('miniprogram_npm/my-ui/btn/index');
+    });
+
+    it('页面自己按包名引用 npm 组件、省略目录的 /index 时也解析好', () => {
+      expect(using('pages/index/index')).toMatchObject({
+        box: '/components/box/box',
+        'own-npm': '/miniprogram_npm/my-ui/icon/index',
+        'own-dir': '/components/dir/index'
+      });
+    });
+
+    it('全局的绝对路径省略 /index 时补全', () => {
+      expect(using('pages/index/index')['g-dir']).toBe('/components/dir/index');
+    });
+
+    it('抽象节点的默认实现同样解析，没有默认实现的保持原样', () => {
+      expect(refs.readUnitJson('components/box/box', refsApp).componentGenerics).toEqual({
+        slotted: { default: '/miniprogram_npm/my-ui/icon/index' },
+        bare: true
+      });
+    });
+
+    it('页面自己声明的同名组件仍然优先', () => {
+      expect(using('pages/own/own')['my-btn']).toBe('/components/box/box');
+    });
+
+    it('插件组件原样保留，解析不到的全局相对引用照旧换算成相对当前页面的路径', () => {
+      expect(using('pages/own/own').plugin).toBe('plugin://p/comp');
+      expect(using('pages/index/index')['g-private']).toBe('plugin-private://wxid/comp');
+      expect(using('pages/index/index')['g-missing']).toBe('../../components/missing/missing');
+    });
+
+    it('独立分包、主包和分包 miniprogram_npm 里的组件不展开全局引用', () => {
+      expect(using('solo/entry')).toEqual({});
+      expect(using('miniprogram_npm/my-ui/btn/index')).toEqual({ icon: '/miniprogram_npm/my-ui/icon/index' });
+      expect(using('pkg/miniprogram_npm/sub-ui/index')).toEqual({});
+    });
   });
 
   it('页面自己声明的同名组件优先于全局组件', () => {
@@ -67,11 +134,6 @@ describe('MiniProgram 项目解析', () => {
       'p/p.json': { usingComponents: { x: '/b/b' } }
     }));
     expect(custom.readUnitJson('p/p', custom.readAppJson()).usingComponents.x).toBe('/b/b');
-  });
-
-  it('miniprogram_npm 内的组件和独立分包不展开全局组件', () => {
-    expect(project.readUnitJson('miniprogram_npm/@vant/weapp/cell/index', app).usingComponents).toEqual({ icon: '../icon/index' });
-    expect(project.readUnitJson('solo/entry', app).usingComponents).toEqual({});
   });
 
   it('递归收集组件：相对路径、绝对路径、npm 包和抽象节点默认实现', () => {

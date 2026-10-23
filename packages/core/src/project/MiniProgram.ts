@@ -82,16 +82,35 @@ export class MiniProgram {
     return pages;
   }
 
-  /** 读取并预处理页面/组件 json，id 不带扩展名 */
+  /**
+   * 读取并预处理页面/组件 json，id 不带扩展名。
+   * 基础库运行时只把组件引用和当前路径拼在一起，不查找 miniprogram_npm、不补 /index（开发者工具编译时已解析好），
+   * 所以能解析到的引用都换成组件的绝对路径
+   */
   readUnitJson(id: string, app: AppJson): UnitJson {
     const json: UnitJson = { ...readJsonFile(path.join(this.root, id + '.json')) };
-    json.usingComponents = { ...json.usingComponents };
+    const resolve = (fromId: string, ref: string) => {
+      const resolved = this.resolveComponent(fromId, ref);
+      return resolved ? '/' + resolved : null;
+    };
 
-    if (!id.startsWith('miniprogram_npm/') && !this.isInIndependentSubPackage(id, app)) {
+    json.usingComponents = Object.fromEntries(
+      Object.entries(json.usingComponents || {}).map(([tag, ref]) => [tag, resolve(id, ref as string) ?? ref])
+    );
+    if (json.componentGenerics) {
+      json.componentGenerics = Object.fromEntries(Object.entries(json.componentGenerics).map(([name, generic]) => [
+        name,
+        typeof generic === 'object' && generic.default ? { ...generic, default: resolve(id, generic.default) ?? generic.default } : generic
+      ]));
+    }
+
+    if (!/(^|\/)miniprogram_npm\//.test(id) && !this.isInIndependentSubPackage(id, app)) {
       for (const [tag, ref] of Object.entries(app.usingComponents || {})) {
         if (json.usingComponents[tag]) continue;
-        if (ref.startsWith('/') || ref.startsWith('plugin://')) {
-          json.usingComponents[tag] = ref;
+        // 全局引用相对 app.json 解析；解析不到的相对路径照旧换算成相对当前页面
+        const resolved = resolve('app', ref);
+        if (resolved || ref.startsWith('/') || /^plugin(-private)?:\/\//.test(ref)) {
+          json.usingComponents[tag] = resolved ?? ref;
         } else {
           const relative = path.posix.relative(path.posix.dirname(id), ref);
           json.usingComponents[tag] = relative.startsWith('.') ? relative : './' + relative;
