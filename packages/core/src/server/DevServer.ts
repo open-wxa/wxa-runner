@@ -13,7 +13,7 @@
  *   /__baselib__/*             官方基础库
  *   /__wxa__/proxy/<协议>/<域名><路径>  网络代理，如 /__wxa__/proxy/https/api.example.com/a?b=1
  *   /__wxa__/mock/<协议>/<域名><路径>   被拦截的请求在 Network 面板里的地址，由 Service Worker（runtime/sw.js）返回响应
- *   /__wxa__/tmp               临时文件：POST ?type=png 保存，返回可直接访问的地址（GET 支持分段请求）；对该地址 HEAD 查大小、DELETE 删除
+ *   /__wxa__/tmp/:session      临时文件：POST ?type=png 保存，返回可直接访问的地址（GET 支持分段请求）；对该地址 HEAD 查大小、DELETE 删除
  *   /__wxa__/region/<kind>     地区选择器用的行政区划数据（districts / streets），取自本机开发者工具
  *   /__wxa__/api/*             --devtools-login：wx.login 的 code、手机号，服务市场、插件的请求转发，只允许本机访问
  *   /__wxa__/ws                文件变化通知：热更新（hot）或整页刷新（reload）；开启 forwardConsole 时浏览器从这里发来报错
@@ -106,7 +106,7 @@ export class DevServer {
   private address = '';
   private lanAccess = false;
   /** 运行时生成的临时文件（canvas 导出、拍照等），随服务器进程存在 */
-  private readonly files = new FileStore();
+  private readonly fileSessions = new Map<string, FileStore>();
   private readonly devtoolsLogin: boolean;
   /** 开启 --devtools-login 时才有 */
   private readonly ticketSource: TicketSource | null;
@@ -197,6 +197,7 @@ export class DevServer {
       server.closeAllConnections();
       await new Promise<void>(resolve => server.close(() => resolve()));
     }
+    this.fileSessions.clear();
   }
 
   private createApp(): Express {
@@ -354,26 +355,49 @@ export class DevServer {
         + 'Service Worker 没有生效（如 DevTools 勾选了 Bypass for network），看不到拦截规则给出的响应');
     });
 
-    // 两种访问方式共用 FileStore：文件 API 使用 JSON；图片、上传等使用原始字节 URL。
-    this.files.mkdir('/__wxa__/tmp', true);
-    app.post('/__wxa__/fs', express.json({ limit: '150mb' }), (req, res) => {
+    // 每个浏览器会话只有一份 FileStore；刷新复用，不同 Playwright context 不共享状态。
+    const sessionFiles = (session: string): FileStore => {
+      if (!/^[a-z0-9-]{1,80}$/i.test(session)) throw new Error('invalid filesystem session');
+      let files = this.fileSessions.get(session);
+      if (!files) {
+        files = new FileStore();
+        files.mkdir('/__wxa__/usr/' + session, true);
+        files.mkdir('/__wxa__/tmp/' + session, true);
+        this.fileSessions.set(session, files);
+      }
+      return files;
+    };
+    app.post('/__wxa__/fs/:session', express.json({ limit: '150mb' }), (req, res) => {
       try {
-        res.json(this.files.execute(req.body.operation, req.body.args || {}));
+        const files = sessionFiles(req.params.session);
+        const args = req.body.args || {};
+        // 目录与文件路径只属于本会话；尤其不能用 .. 跨出目录或删掉会话根目录。
+        for (const key of ['filePath', 'srcPath', 'destPath', 'path', 'dirPath']) {
+          if (args[key] === undefined) continue;
+          const target = files.normalize(args[key]);
+          const roots = ['usr', 'tmp'].map(kind => `/__wxa__/${kind}/${req.params.session}`);
+          if (!roots.some(root => target === root || target.startsWith(root + '/'))) {
+            throw new Error('file path is outside this session');
+          }
+          if (req.body.operation === 'rmdir' && roots.includes(target)) throw new Error('cannot remove filesystem root');
+        }
+        res.json(files.execute(req.body.operation, args));
       } catch (error) {
         res.status(400).json({ error: (error as Error).message });
       }
     });
 
-    // 返回完整的 http 地址：image、video 组件只原样使用 http(s) 地址，其余的会被当成页面相对路径
-    app.post('/__wxa__/tmp', express.raw({ type: () => true, limit: '100mb' }), (req, res) => {
+    // 返回完整的 http 地址：image、video 组件只原样使用 http(s) 地址。
+    app.post('/__wxa__/tmp/:session', express.raw({ type: () => true, limit: '100mb' }), (req, res) => {
       const type = String(req.query.type || 'png');
-      if (!/^[a-z0-9]+$/i.test(type)) {
-        res.status(400).type('text').send(`非法的文件类型 ${type}`);
+      if (!/^[a-z0-9]+$/i.test(type) || !/^[a-z0-9-]{1,80}$/i.test(req.params.session)) {
+        res.status(400).type('text').send('invalid file type or session');
         return;
       }
       const name = `${randomUUID()}.${type}`;
-      this.files.write('/__wxa__/tmp/' + name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
-      res.json({ url: `${req.protocol}://${req.get('host')}/__wxa__/tmp/${name}` });
+      const filePath = `/__wxa__/tmp/${req.params.session}/${name}`;
+      sessionFiles(req.params.session).write(filePath, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
+      res.json({ url: `${req.protocol}://${req.get('host')}${filePath}` });
     });
     app.get('/__wxa__/region/:kind', (req, res) => {
       const kind = req.params.kind;
@@ -385,15 +409,16 @@ export class DevServer {
       res.type('text/plain; charset=utf-8').set('Cache-Control', 'public, max-age=86400').send(data);
     });
 
-    app.get<{ 0: string }>('/__wxa__/tmp/*', (req, res) => {
-      const node = this.files.stat('/__wxa__/tmp/' + req.params[0]);
+    app.get<{ kind: string; session: string; 0: string }>('/__wxa__/:kind(usr|tmp)/:session/*', (req, res) => {
+      const files = this.fileSessions.get(req.params.session);
+      const node = files?.stat(`/__wxa__/${req.params.kind}/${req.params.session}/` + req.params[0]);
       if (!node || node.dir) {
         res.status(404).end();
         return;
       }
       const data = node.data;
       res.type(path.extname(req.params[0]));
-      // 哈希只在写入时生成，Range 请求不重复扫描整个文件。
+      // 每次写入更新版本号，追加和 Range 请求不再对整份文件计算哈希。
       res.setHeader('ETag', `"${node.etag}"`);
       // 支持分段请求，video 组件播放临时文件时才能跳转（不支持时浏览器认为视频不能跳转，seek 不起作用）
       res.setHeader('Accept-Ranges', 'bytes');
@@ -411,9 +436,11 @@ export class DevServer {
       }
       res.send(data);
     });
-    app.delete<{ 0: string }>('/__wxa__/tmp/*', (req, res) => {
+    app.delete<{ session: string; 0: string }>('/__wxa__/tmp/:session/*', (req, res) => {
       try {
-        this.files.remove('/__wxa__/tmp/' + req.params[0], { dir: false });
+        const files = this.fileSessions.get(req.params.session);
+        if (!files) throw new Error('file not exist');
+        files.remove(`/__wxa__/tmp/${req.params.session}/` + req.params[0], { dir: false });
         res.status(204).end();
       } catch {
         res.status(404).end();

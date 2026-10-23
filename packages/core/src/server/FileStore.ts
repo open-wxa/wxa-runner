@@ -1,6 +1,6 @@
 /** 开发服务器持有的文件存储；文件 API、下载、上传和资源 URL 共用这些字节。 */
 
-import { createHash } from 'crypto';
+import { randomUUID } from 'crypto';
 
 interface FsNode {
   dir: boolean;
@@ -11,6 +11,8 @@ interface FsNode {
 
 /** 基础库会往 http://usr/ 写运行日志；业务代码也可以通过 FileSystemManager 读写 */
 export class FileStore {
+  private readonly etagPrefix = randomUUID();
+  private version = 0;
   private nodes = new Map<string, FsNode>([['/', { dir: true, data: Buffer.alloc(0), mtime: Date.now(), etag: '' }]]);
 
   normalize(filePath: string): string {
@@ -47,7 +49,7 @@ export class FileStore {
     const existing = this.nodes.get(target);
     if (existing?.dir) throw new Error(`illegal operation on a directory ${filePath}`);
     const contents = append && existing ? Buffer.concat([existing.data, data]) : data;
-    this.nodes.set(target, { dir: false, data: contents, mtime: Date.now(), etag: createHash('sha256').update(contents).digest('hex') });
+    this.nodes.set(target, { dir: false, data: contents, mtime: Date.now(), etag: `${this.etagPrefix}-${++this.version}` });
   }
 
   read(filePath: string): Buffer {

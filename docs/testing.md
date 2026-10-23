@@ -256,7 +256,9 @@ test('上传头像', async ({ miniProgram, page }) => {
 | `wxaServerOptions` | `{}` | 开发服务器的其他参数，如 `setup`、`baseLibVersion`、`devtoolsLogin`。路径相对配置文件 |
 | `wxaCheckErrors` | `true` | 用例结束时[检查运行时错误](#检查运行时错误) |
 
-- 每个 worker（Playwright 并行运行用例的进程）启动一个开发服务器，小程序只编译一次；每个用例用一个新的浏览器上下文，存储、页面栈互不影响
+- 每个 worker（Playwright 并行运行用例的进程）启动一个开发服务器，小程序只编译一次；每个用例用一个新的浏览器上下文，Storage、用户文件、临时文件和页面栈互不影响
+- 文件在开发服务器内存中按浏览器会话隔离。会话标识保存在 localStorage；同一上下文的页面和刷新复用文件，新的上下文得到独立目录。关闭浏览器上下文不会立即清理服务器文件，开发服务器关闭时全部释放；重启服务器后文件不保留
+- 文件接口保持同步和异步语义：只有 `Sync` 接口使用同步 XHR，其他文件接口用异步请求
 - 测试时不监听文件变化、不热更新，运行环境和真机一致
 - `wxaProject`、`wxaServerOptions` 只能写在配置文件里，或用例文件顶层的 `test.use` 里，不能写在 `describe` 里
 

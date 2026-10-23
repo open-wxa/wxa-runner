@@ -268,6 +268,7 @@ describe('网络 API', () => {
   });
 
   it('downloadFile 把下载的文件存成开发服务器上的临时文件，返回它的地址', async () => {
+    vi.stubGlobal('localStorage', { getItem: () => 'test-session' });
     const saved: Array<{ url: string; content: string }> = [];
     const { apis, events } = setup(proxied('file-content'));
     vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
@@ -279,7 +280,7 @@ describe('网络 API', () => {
     const { downloadTaskId } = call(apis, 'createDownloadTask', { url: 'https://cdn.example.com/a.png?v=2' });
 
     await vi.waitFor(() => expect(events.some(([, d]) => d.state === 'success')).toBe(true));
-    expect(saved).toEqual([{ url: '/__wxa__/tmp?type=png', content: 'file-content' }]);
+    expect(saved).toEqual([{ url: '/__wxa__/tmp/test-session?type=png', content: 'file-content' }]);
     expect(events.at(-1)).toEqual(['onDownloadTaskStateChange', expect.objectContaining({
       downloadTaskId, state: 'success', tempFilePath: 'http://localhost:3000/__wxa__/tmp/saved.png', statusCode: 200
     })]);

@@ -185,6 +185,81 @@ describe.skipIf(!e2eReady)('下载文件的二进制读取与用户目录复制'
     expect((await call('callFs', 'access', { path: destPath })).errMsg).toMatch(/:fail/);
     expect(await runner.page.evaluate(async path => (await fetch(path)).status, resource.href)).toBe(404);
   });
+  it('同一 DevServer 的浏览器上下文隔离用户文件，同一上下文刷新后保留', async () => {
+    await runner.open('/?path=pages/index/index');
+    const root = await call('userPath');
+    const filePath = root + '/login.json';
+    const temporaryFile = await download();
+    expect((await call('callFs', 'writeFile', { filePath, data: 'token-A' })).errMsg).toMatch(/:ok$/);
+    const context = await runner.page.context().browser()!.newContext();
+    try {
+      const page = await context.newPage();
+      await page.goto(runner.base + '/?path=pages/index/index');
+      await page.waitForFunction(() => window.__wxa_test_api__);
+      await page.evaluate(() => window.__wxa_test_api__.ready);
+      const otherCall = (method: string, ...args: unknown[]) =>
+        page.evaluate(([method, args]) => window.__wxa_test_api__.callPageMethod(method, ...args), [method, args] as const) as Promise<any>;
+      const otherRoot = await otherCall('userPath');
+      expect(otherRoot).not.toBe(root);
+      expect((await otherCall('callFs', 'readdir', { dirPath: otherRoot })).files).not.toContain('login.json');
+      for (const path of [filePath, temporaryFile, otherRoot + '/../' + root.split('/').at(-1) + '/login.json']) {
+        expect((await otherCall('callFs', 'readFile', { filePath: path })).errMsg).toMatch(/:fail/);
+        expect((await otherCall('callFs', 'writeFile', { filePath: path, data: 'leak' })).errMsg).toMatch(/:fail/);
+      }
+      expect((await call('callFs', 'rmdir', { dirPath: root, recursive: true })).errMsg).toMatch(/:fail/);
+      expect((await otherCall('callFs', 'writeFile', { filePath: otherRoot + '/login.json', data: 'token-B' })).errMsg).toMatch(/:ok$/);
+      expect(await call('read', filePath, 'utf8')).toEqual({ data: 'token-A' });
+      const sameContextPage = await runner.page.context().newPage();
+      try {
+        await sameContextPage.goto(runner.base + '/?path=pages/index/index');
+        await sameContextPage.waitForFunction(() => window.__wxa_test_api__);
+        await sameContextPage.evaluate(() => window.__wxa_test_api__.ready);
+        expect(await sameContextPage.evaluate(() => window.__wxa_test_api__.callPageMethod('userPath'))).toBe(root);
+        expect(await sameContextPage.evaluate(path => window.__wxa_test_api__.callPageMethod('read', path, 'utf8'), filePath)).toEqual({
+          data: 'token-A'
+        });
+      } finally {
+        await sameContextPage.close();
+      }
+      await runner.open('/?path=pages/index/index');
+      expect(await call('userPath')).toBe(root);
+      expect(await call('read', filePath, 'utf8')).toEqual({ data: 'token-A' });
+    } finally {
+      await context.close();
+    }
+  });
+
+  it('异步文件请求等待服务器时不阻塞宿主页面', async () => {
+    await runner.open('/?path=pages/index/index');
+    const filePath = (await call('userPath')) + '/async.txt';
+    let release!: () => void;
+    let arrived!: () => void;
+    const pending = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const requested = new Promise<void>(resolve => {
+      arrived = resolve;
+    });
+    await runner.page.route('**/__wxa__/fs/**', async route => {
+      arrived();
+      await pending;
+      await route.continue();
+    });
+    const write = call('callFs', 'writeFile', { filePath, data: 'async' });
+    try {
+      await requested;
+      // 同步 XHR 会把这次页面求值也阻塞到请求结束；异步接口应让事件循环继续工作。
+      const responsive = runner.page.evaluate(() => new Promise(resolve => setTimeout(() => resolve(true), 0)));
+      await expect(Promise.race([responsive, new Promise(resolve => setTimeout(() => resolve(false), 1000))])).resolves.toBe(true);
+    } finally {
+      release();
+      await write;
+      await runner.page.unrouteAll({ behavior: 'wait' });
+    }
+    expect((await write).errMsg).toMatch(/:ok$/);
+    expect(await call('read', filePath, 'utf8')).toEqual({ data: 'async' });
+  });
+
   it('未实现的 FileSystemManager 方法不能静默当作通过', async () => {
     await runner.open('/?path=pages/index/index');
     const filePath = (await call('userPath')) + '/unsupported.txt';

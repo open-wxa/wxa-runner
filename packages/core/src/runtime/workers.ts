@@ -6,6 +6,7 @@
  * 基础库加载时把全局的 WeixinWorker 换成自己的包装，原始对象留给自己调用；Worker 发来的消息交给包装上的 workerMsgHandler
  */
 
+import { fileSession } from './fileSession';
 import type { FromWorkerMessage, HostApi, ToWorkerMessage } from './types';
 
 interface CreateOptions {
@@ -42,7 +43,7 @@ export function createWeixinWorker(win: Window, host: HostApi) {
     create(_script: string, options: CreateOptions = {}): number {
       if (!configured) return -1;
       const id = nextId++;
-      const url = `/__wxa__/worker.js?id=${id}`;
+      const url = `/__wxa__/worker.js?id=${id}&session=${fileSession()}`;
       const worker = new Worker(url);
       const allowed = new Set(options.APIList || []);
       worker.addEventListener('message', ({ data }: MessageEvent<FromWorkerMessage>) => {

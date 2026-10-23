@@ -32,7 +32,7 @@ export function createSavedFileApis(storage: MiniProgramStorage): Record<string,
   return {
     // 和真机一样：存成新文件，原来的临时文件随之删除
     saveFile: async args => {
-      // FileSystemManager.saveFile 可以指定保存位置，那是内存文件系统，存不了图片等二进制内容
+      // 指定保存路径的 FileSystemManager.saveFile 尚未实现，不能静默忽略。
       if (args.filePath) throw new Error('wxa-runner 暂不支持指定 filePath，不传时保存成功后返回 savedFilePath');
       const res = isTempFile(args.tempFilePath) ? await fetch(args.tempFilePath) : null;
       if (!res?.ok) throw new Error(`tempFilePath file not exist ${args.tempFilePath}`);

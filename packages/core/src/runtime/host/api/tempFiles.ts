@@ -5,6 +5,8 @@
  * uploadFile 也能直接读取。
  */
 
+import { fileSession } from '../../fileSession';
+
 const TEMP_DIR = '/__wxa__/tmp';
 
 /**
@@ -12,7 +14,7 @@ const TEMP_DIR = '/__wxa__/tmp';
  * @throws 开发服务器拒绝保存时，带上它给出的原因（如扩展名不合法）
  */
 export async function saveTempFile(data: BodyInit, type: string): Promise<string> {
-  const res = await fetch(`${TEMP_DIR}?type=${encodeURIComponent(type)}`, { method: 'POST', body: data });
+  const res = await fetch(`${TEMP_DIR}/${fileSession()}?type=${encodeURIComponent(type)}`, { method: 'POST', body: data });
   if (!res.ok) throw new Error(await res.text());
   const { url } = await res.json();
   return url;

@@ -3,14 +3,27 @@
  * 同步接口通过同源 XHR 返回结果，不另建浏览器缓存，避免覆盖、删除后读取到旧数据。
  */
 import { ApiHandler, fail, ok } from './registry';
+import { fileSession } from '../../fileSession';
 
-type FileRequest = (operation: string, args: Record<string, any>) => Record<string, any>;
+type FileRequest = (operation: string, args: Record<string, any>, sync: boolean) => Record<string, any> | Promise<Record<string, any>>;
 
-function requestFile(operation: string, args: Record<string, any>): Record<string, any> {
+function requestFile(operation: string, args: Record<string, any>, sync: boolean) {
+  const url = '/__wxa__/fs/' + fileSession();
+  const body = JSON.stringify({ operation, args });
+  if (!sync)
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body
+    }).then(async response => {
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || `filesystem HTTP ${response.status}`);
+      return result;
+    });
   const request = new XMLHttpRequest();
-  request.open('POST', '/__wxa__/fs', false);
+  request.open('POST', url, false);
   request.setRequestHeader('content-type', 'application/json');
-  request.send(JSON.stringify({ operation, args }));
+  request.send(body);
   const result = JSON.parse(request.responseText);
   if (request.status !== 200) throw new Error(result.error || `filesystem HTTP ${request.status}`);
   return result;
@@ -48,12 +61,15 @@ export function createFileSystemApis(request: FileRequest = requestFile): Record
           input.data = btoa(binary);
           input.binary = true;
         }
-        const result = request(operation, input);
-        if (result.binary) {
-          result.data = Uint8Array.from(atob(result.data), character => character.charCodeAt(0)).buffer;
-          delete result.binary;
-        }
-        return ok(api, result);
+        const decode = (result: Record<string, any>) => {
+          if (result.binary) {
+            result.data = Uint8Array.from(atob(result.data), character => character.charCodeAt(0)).buffer;
+            delete result.binary;
+          }
+          return ok(api, result);
+        };
+        const result = request(operation, input, api.endsWith('Sync'));
+        return result instanceof Promise ? result.then(decode, error => fail(api, error.message)) : decode(result);
       } catch (error) {
         return fail(api, (error as Error).message);
       }
@@ -64,9 +80,10 @@ export function createFileSystemApis(request: FileRequest = requestFile): Record
     apis['fs_' + operation + 'Sync'] = handler;
   }
   // 不带协议的是代码包里的文件，不能被用户目录下的同名文件顶替。
+  const readUserFile = apis.readFile;
   apis.readFile = (args, context) =>
-    /^[a-z]+:\/\//i.test(String(args.filePath)) || String(args.filePath).startsWith('/__wxa__/tmp/')
-      ? apis.readFileSync(args, context)
+    /^[a-z]+:\/\//i.test(String(args.filePath)) || /^\/__wxa__\/(tmp|usr)\//.test(String(args.filePath))
+      ? readUserFile(args, context)
       : readPackageFile(args.filePath, args.encoding).then(
           data => ok(context.api, { data }),
           error => fail(context.api, error.message)
