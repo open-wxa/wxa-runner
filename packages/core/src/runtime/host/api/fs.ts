@@ -6,7 +6,7 @@
  */
 
 import { ApiHandler, fail, ok } from './registry';
-import { isTempFile, tempFileSize } from './tempFiles';
+import { copyTempFile, isTempFile, removeTempFile, tempFileBytes, tempFileSize } from './tempFiles';
 
 const DIR_MODE = 0o40755;
 const FILE_MODE = 0o100644;
@@ -88,6 +88,7 @@ export class MemoryFileSystem {
 
 export function createFileSystemApis(): Record<string, ApiHandler> {
   const fs = new MemoryFileSystem();
+  fs.mkdir('/__wxa__/tmp', true);
 
   const guard = (api: string, action: () => Record<string, unknown> | void) => {
     try {
@@ -97,7 +98,7 @@ export function createFileSystemApis(): Record<string, ApiHandler> {
     }
   };
 
-  const statResult = (node: FsNode) => {
+  const statResult = (node: Omit<FsNode, 'data'> & { data: string | Uint8Array }) => {
     const stats = {
       mode: node.dir ? DIR_MODE : FILE_MODE,
       size: node.data.length,
@@ -107,19 +108,34 @@ export function createFileSystemApis(): Record<string, ApiHandler> {
     return { stats, ...stats };
   };
 
-  const readMemoryFile: ApiHandler = (args, { api }) => guard(api, () => ({ data: fs.read(args.filePath) }));
+  const readLocalFile: ApiHandler = (args, { api }) => guard(api, () => {
+    const bytes = tempFileBytes(args.filePath);
+    if (!bytes) return { data: fs.read(args.filePath) };
+    if (args.encoding === undefined) return { data: bytes.slice().buffer };
+    if (args.encoding === 'base64') {
+      let binary = '';
+      for (let offset = 0; offset < bytes.length; offset += 32768) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+      }
+      return { data: btoa(binary) };
+    }
+    return { data: new TextDecoder(args.encoding).decode(bytes) };
+  });
 
   const apis: Record<string, ApiHandler> = {
-    access: (args, { api }) => (fs.stat(args.path) ? ok(api) : fail(api, `no such file or directory ${args.path}`)),
+    access: (args, { api }) => (tempFileBytes(args.path) || fs.stat(args.path) ? ok(api) : fail(api, `no such file or directory ${args.path}`)),
     stat: (args, { api }) => {
-      const node = fs.stat(args.path);
+      const bytes = tempFileBytes(args.path);
+      const node = bytes ? { dir: false, data: bytes, mtime: Date.now() } : fs.stat(args.path);
       return node ? ok(api, statResult(node)) : fail(api, `no such file or directory ${args.path}`);
     },
     mkdir: (args, { api }) => guard(api, () => fs.mkdir(args.dirPath, !!args.recursive)),
     writeFile: (args, { api }) => guard(api, () => fs.write(args.filePath, String(args.data ?? ''))),
     appendFile: (args, { api }) => guard(api, () => fs.write(args.filePath, String(args.data ?? ''), true)),
     readdir: (args, { api }) => guard(api, () => ({ files: fs.readdir(args.dirPath) })),
-    unlink: (args, { api }) => guard(api, () => fs.remove(args.filePath, { dir: false })),
+    unlink: (args, { api }) => isTempFile(args.filePath)
+      ? removeTempFile(args.filePath).then(() => ok(api), error => fail(api, error.message))
+      : guard(api, () => fs.remove(args.filePath, { dir: false })),
     rmdir: (args, { api }) => guard(api, () => fs.remove(args.dirPath, { dir: true, recursive: !!args.recursive })),
     getFileInfo: (args, { api }) => {
       if (isTempFile(args.filePath)) {
@@ -130,6 +146,12 @@ export function createFileSystemApis(): Record<string, ApiHandler> {
     }
   };
   for (const name of Object.keys(apis)) apis[name + 'Sync'] = apis[name];
+  apis.unlinkSync = (args, { api }) => guard(api, () => fs.remove(args.filePath, { dir: false }));
+  apis.copyFile = (args, { api }) => copyTempFile(args.srcPath, args.destPath).then(
+    () => ok(api), error => fail(api, error.message)
+  );
+  // FileSystemManager 的异步调用在部分基础库里使用 fs_ 前缀。
+  for (const name of Object.keys(apis)) if (!name.endsWith('Sync')) apis['fs_' + name] = apis[name];
 
   return {
     ...apis,
@@ -137,12 +159,12 @@ export function createFileSystemApis(): Record<string, ApiHandler> {
     // 不带协议的是代码包里的文件，要向开发服务器取；readFileSync 同步返回不了，只读内存文件系统。
     // 内存文件系统的路径去掉了协议，不能先在里面找：用户目录下的同名文件会顶替代码包里的
     readFile: (args, context) => (/^[a-z]+:\/\//i.test(String(args.filePath))
-      ? readMemoryFile(args, context)
+      ? readLocalFile(args, context)
       : readPackageFile(fs.normalize(args.filePath), args.encoding).then(
         data => ok(context.api, { data }),
         error => fail(context.api, error.message)
       )),
-    readFileSync: readMemoryFile
+    readFileSync: readLocalFile
   };
 }
 

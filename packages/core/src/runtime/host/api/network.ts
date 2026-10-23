@@ -173,7 +173,9 @@ export function createNetworkApis(options: NetworkApiOptions): Record<string, Ap
   const createUploadTask: ApiHandler = (args, { api }) => {
     const uploadTaskId = startTask(args, async (signal, id) => {
       try {
-        const file = await (await fetch(args.filePath)).blob();
+        const source = await fetch(args.filePath);
+        if (!source.ok) throw new Error(`file not exist ${args.filePath}`);
+        const file = await source.blob();
         const form = new FormData();
         for (const [key, value] of Object.entries(args.formData || {})) form.append(key, String(value));
         form.append(args.name || 'file', file, String(args.filePath).split('/').pop() || 'file');

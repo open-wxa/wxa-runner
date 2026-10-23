@@ -6,15 +6,41 @@
  */
 
 const TEMP_DIR = '/__wxa__/tmp';
+// 同步 readFileSync 不能发网络请求。下载、复制时保留一份原始字节，与服务器文件一起回收。
+const fileBytes = new Map<string, Uint8Array>();
+
+export function tempFileBytes(url: unknown): Uint8Array | undefined {
+  if (typeof url !== 'string') return undefined;
+  const key = url.startsWith(TEMP_DIR + '/') ? location.origin + url : url;
+  try {
+    return fileBytes.get(new URL(key).href);
+  } catch {
+    return undefined;
+  }
+}
+
+/** 复制到用户目录后，渲染组件和 uploadFile 仍可通过同一地址读取。 */
+export async function copyTempFile(source: string, destination: string): Promise<void> {
+  if (!isTempFile(destination)) throw new Error('copyFile destination outside user directory');
+  const response = await fetch(source);
+  if (!response.ok) throw new Error(`source file not found ${source}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const saved = await fetch(destination, { method: 'POST', body: bytes });
+  if (!saved.ok) throw new Error(`copyFile failed ${saved.status}`);
+  fileBytes.set(new URL(destination).href, bytes);
+}
 
 /**
  * @param type 扩展名（如 png），读取时按它返回 Content-Type
  * @throws 开发服务器拒绝保存时，带上它给出的原因（如扩展名不合法）
  */
 export async function saveTempFile(data: BodyInit, type: string): Promise<string> {
-  const res = await fetch(`${TEMP_DIR}?type=${encodeURIComponent(type)}`, { method: 'POST', body: data });
+  const blob = data instanceof Blob ? data : await new Response(data).blob();
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  const res = await fetch(`${TEMP_DIR}?type=${encodeURIComponent(type)}`, { method: 'POST', body: blob });
   if (!res.ok) throw new Error(await res.text());
   const { url } = await res.json();
+  fileBytes.set(new URL(url).href, bytes);
   return url;
 }
 
@@ -47,5 +73,7 @@ export async function tempFileSize(url: string): Promise<number | null> {
 
 /** 文件不存在时什么也不做 */
 export async function removeTempFile(url: string): Promise<void> {
-  await fetch(url, { method: 'DELETE' });
+  const response = await fetch(url, { method: 'DELETE' });
+  if (!response.ok && response.status !== 404) throw new Error(`remove file failed ${response.status}`);
+  fileBytes.delete(new URL(url, location.origin).href);
 }

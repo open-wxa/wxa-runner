@@ -20,7 +20,7 @@
  *   其余路径                    小程序目录下的静态资源
  */
 
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import fs from 'fs';
 import http from 'http';
 import net from 'net';
@@ -364,6 +364,16 @@ export class DevServer {
       this.tempFiles.set(name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
       res.json({ url: `${req.protocol}://${req.get('host')}/__wxa__/tmp/${name}` });
     });
+    // 指定名称的用户文件，和下载的临时文件使用同一个存储。
+    app.post('/__wxa__/tmp/:name', express.raw({ type: () => true, limit: '100mb' }), (req, res) => {
+      const name = req.params.name;
+      if (!name || name === '.' || name === '..' || name.includes('\0') || /[/\\]/.test(name)) {
+        res.status(400).end();
+        return;
+      }
+      this.tempFiles.set(name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
+      res.status(204).end();
+    });
     app.get('/__wxa__/region/:kind', (req, res) => {
       const kind = req.params.kind;
       const data = kind === 'districts' || kind === 'streets' ? readRegionData(kind) : null;
@@ -381,8 +391,8 @@ export class DevServer {
         return;
       }
       res.type(path.extname(req.params.name));
-      // 临时文件保存后不会改写，文件名就能作 ETag，分段和完整响应一致，也不用每次对整个文件算摘要
-      res.setHeader('ETag', `"${req.params.name}"`);
+      // 用户文件允许覆盖；同一路径的内容变化后，不能命中旧缓存。
+      res.setHeader('ETag', `"${createHash('sha256').update(data).digest('hex')}"`);
       // 支持分段请求，video 组件播放临时文件时才能跳转（不支持时浏览器认为视频不能跳转，seek 不起作用）
       res.setHeader('Accept-Ranges', 'bytes');
       const ranges = req.range(data.length);

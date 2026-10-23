@@ -272,7 +272,8 @@ export class Host implements HostApi {
    */
   private reportUnimplemented({ api, from }: ApiContext) {
     const wx = (this.serviceWindow() as any)?.wx;
-    if (from !== 'service' || typeof wx?.[api] !== 'function') return;
+    if (from !== 'service' || !(typeof wx?.[api] === 'function' ||
+      (api.startsWith('fs_') && typeof wx?.getFileSystemManager?.()[api.slice(3)] === 'function'))) return;
     if (this.errors.some(error => error.api === api)) return;
     const message = `wx.${api} 尚未实现，返回了默认成功。可以用 mock 覆盖，启动阶段就调用的要在 setup 里 mock`;
     this.errors.push({ kind: 'service', webviewId: 0, api, message });

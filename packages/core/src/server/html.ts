@@ -58,7 +58,7 @@ export function appserviceHtml(
 <head>
 <meta charset="utf-8">
 <title>appservice</title>
-<script>var __wxConfig = ${toJs(wxConfig)};</script>
+<script>var __wxConfig = ${toJs(wxConfig)}; __wxConfig.env.USER_DATA_PATH = location.origin + "/__wxa__/tmp";</script>
 <script src="/__wxa__/runtime/frame.js" data-kind="service" data-app-service="${escapeHtml(JSON.stringify(scripts))}"${options.hot ? ' data-hot="1"' : ''}></script>
 <script src="/__baselib__/WAServiceMainContext.js"></script>
 </head>
@@ -72,7 +72,7 @@ export function appserviceHtml(
 <head>
 <meta charset="utf-8">
 <title>appservice</title>
-<script>var __wxConfig = ${toJs(wxConfig)};</script>
+<script>var __wxConfig = ${toJs(wxConfig)}; __wxConfig.env.USER_DATA_PATH = location.origin + "/__wxa__/tmp";</script>
 <script src="/__wxa__/runtime/frame.js" data-kind="service"></script>
 <script src="/__baselib__/WAService.js"></script>
 ${enableHotUpdate(options.hot)}<script>
@@ -142,7 +142,7 @@ ${pageWindow(build, pagePath).disableScroll ? '<style>body{overflow-y:hidden}</s
  */
 export function workerScript(build: BuildResult, baseLib: { version: string; hasWorker: boolean }): string {
   const modules = build.workerModules.map(id => `/__wxa__/module/${encodeURI(id)}?v=${build.version}`);
-  const prelude = `var __wxConfig = ${toJs(build.wxConfig)};
+  const prelude = `var __wxConfig = ${toJs(build.wxConfig)}; __wxConfig.env.USER_DATA_PATH = location.origin + "/__wxa__/tmp";
 importScripts('/__wxa__/runtime/worker.js');
 `;
   if (!baseLib.hasWorker) {
@@ -196,7 +196,7 @@ function webviewHead(build: AppBuild, pagePath: string, id: number): string {
 <!-- 逻辑层建的 2d、webgl 画布搬进 wx-canvas 后铺满它（见 frame.ts 的 moveCanvasesIntoPages）。
      基础库还会按逻辑层里的布局改它的位置和显隐，这里一律压住；触摸照常交给 wx-canvas 自己的 canvas -->
 <style>.wxa-service-canvas{position:absolute!important;left:0!important;top:0!important;width:100%!important;height:100%!important;visibility:inherit!important;pointer-events:none}</style>
-<script>var __wxConfig = ${toJs(wxConfig)};</script>
+<script>var __wxConfig = ${toJs(wxConfig)}; __wxConfig.env.USER_DATA_PATH = location.origin + "/__wxa__/tmp";</script>
 <script src="/__wxa__/runtime/frame.js" data-kind="webview" data-webview-id="${id}"></script>
 <script src="/__baselib__/WAWebview.js"></script>`;
 }
