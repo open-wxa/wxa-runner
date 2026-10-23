@@ -1,6 +1,6 @@
 {
   "name": "@open-wxa/wxa-runner-core",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Dev server and browser runtime that run WeChat mini-programs on the official base library",
   "license": "MIT",
   "author": "open-wxa",

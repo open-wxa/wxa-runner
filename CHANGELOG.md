@@ -1,5 +1,20 @@
 # 更新日志
 
+## [0.8.0](https://github.com/open-wxa/wxa-runner/compare/v0.7.0...v0.8.0) (2026-10-23)
+
+
+### 新功能
+
+* Network 面板里显示请求的原地址，被拦截的请求也能看到 ([#72](https://github.com/open-wxa/wxa-runner/issues/72)) ([01d584f](https://github.com/open-wxa/wxa-runner/commit/01d584f3790595f71c9bb3932d6370d9402379fc))
+* 报错转发到终端，默认端口被占用时自动换端口，--host 开放局域网访问 ([#65](https://github.com/open-wxa/wxa-runner/issues/65)) ([e189f98](https://github.com/open-wxa/wxa-runner/commit/e189f98478a3acd5f5424cb03448c54172da6f8d))
+
+
+### 问题修复
+
+* 下载文件支持二进制读取和用户目录复制 ([#71](https://github.com/open-wxa/wxa-runner/issues/71)) ([c398e73](https://github.com/open-wxa/wxa-runner/commit/c398e73bef1d383137fb5938a6f1dc515f8e5b1b))
+* 在低于 18 的 Node.js 上运行命令行时直接退出，说明要求的版本和怎么切换 ([#66](https://github.com/open-wxa/wxa-runner/issues/66)) ([45edad9](https://github.com/open-wxa/wxa-runner/commit/45edad9d988a878e5c3e80c4947720400178ac63))
+* 流式转发 wx.request 分块并传播请求取消 ([#69](https://github.com/open-wxa/wxa-runner/issues/69)) ([2e0d794](https://github.com/open-wxa/wxa-runner/commit/2e0d79417a6ee29f3fd81a7a0c402ac6635f5d09))
+
 ## [0.7.0](https://github.com/open-wxa/wxa-runner/compare/v0.6.0...v0.7.0) (2026-10-22)
 
 
