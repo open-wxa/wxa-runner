@@ -1,5 +1,12 @@
 #!/usr/bin/env node
 
+// 先于加载依赖检查：npm / npx 对 engines 只警告，低版本照样能启动，到用 fetch 等时才报看不懂的错
+const requiredNode = Number(/\d+/.exec(require('../package.json').engines.node)[0]);
+if (Number(process.versions.node.split('.')[0]) < requiredNode) {
+  console.error(`wxa-runner 需要 Node.js ${requiredNode} 及以上，当前是 ${process.versions.node}。请先切换 Node.js 版本，如 nvm use 22`);
+  process.exit(1);
+}
+
 const { Command, Option } = require('commander');
 const chalk = require('chalk');
 const path = require('path');
