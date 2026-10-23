@@ -20,7 +20,8 @@
  *   其余路径                    小程序目录下的静态资源
  */
 
-import { createHash, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
+import { FileStore } from './FileStore';
 import fs from 'fs';
 import http from 'http';
 import net from 'net';
@@ -105,7 +106,7 @@ export class DevServer {
   private address = '';
   private lanAccess = false;
   /** 运行时生成的临时文件（canvas 导出、拍照等），随服务器进程存在 */
-  private readonly tempFiles = new Map<string, Buffer>();
+  private readonly files = new FileStore();
   private readonly devtoolsLogin: boolean;
   /** 开启 --devtools-login 时才有 */
   private readonly ticketSource: TicketSource | null;
@@ -353,6 +354,16 @@ export class DevServer {
         + 'Service Worker 没有生效（如 DevTools 勾选了 Bypass for network），看不到拦截规则给出的响应');
     });
 
+    // 两种访问方式共用 FileStore：文件 API 使用 JSON；图片、上传等使用原始字节 URL。
+    this.files.mkdir('/__wxa__/tmp', true);
+    app.post('/__wxa__/fs', express.json({ limit: '150mb' }), (req, res) => {
+      try {
+        res.json(this.files.execute(req.body.operation, req.body.args || {}));
+      } catch (error) {
+        res.status(400).json({ error: (error as Error).message });
+      }
+    });
+
     // 返回完整的 http 地址：image、video 组件只原样使用 http(s) 地址，其余的会被当成页面相对路径
     app.post('/__wxa__/tmp', express.raw({ type: () => true, limit: '100mb' }), (req, res) => {
       const type = String(req.query.type || 'png');
@@ -361,18 +372,8 @@ export class DevServer {
         return;
       }
       const name = `${randomUUID()}.${type}`;
-      this.tempFiles.set(name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
+      this.files.write('/__wxa__/tmp/' + name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
       res.json({ url: `${req.protocol}://${req.get('host')}/__wxa__/tmp/${name}` });
-    });
-    // 指定名称的用户文件，和下载的临时文件使用同一个存储。
-    app.post('/__wxa__/tmp/:name', express.raw({ type: () => true, limit: '100mb' }), (req, res) => {
-      const name = req.params.name;
-      if (!name || name === '.' || name === '..' || name.includes('\0') || /[/\\]/.test(name)) {
-        res.status(400).end();
-        return;
-      }
-      this.tempFiles.set(name, Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
-      res.status(204).end();
     });
     app.get('/__wxa__/region/:kind', (req, res) => {
       const kind = req.params.kind;
@@ -384,15 +385,16 @@ export class DevServer {
       res.type('text/plain; charset=utf-8').set('Cache-Control', 'public, max-age=86400').send(data);
     });
 
-    app.get('/__wxa__/tmp/:name', (req, res) => {
-      const data = this.tempFiles.get(req.params.name);
-      if (!data) {
+    app.get<{ 0: string }>('/__wxa__/tmp/*', (req, res) => {
+      const node = this.files.stat('/__wxa__/tmp/' + req.params[0]);
+      if (!node || node.dir) {
         res.status(404).end();
         return;
       }
-      res.type(path.extname(req.params.name));
-      // 用户文件允许覆盖；同一路径的内容变化后，不能命中旧缓存。
-      res.setHeader('ETag', `"${createHash('sha256').update(data).digest('hex')}"`);
+      const data = node.data;
+      res.type(path.extname(req.params[0]));
+      // 哈希只在写入时生成，Range 请求不重复扫描整个文件。
+      res.setHeader('ETag', `"${node.etag}"`);
       // 支持分段请求，video 组件播放临时文件时才能跳转（不支持时浏览器认为视频不能跳转，seek 不起作用）
       res.setHeader('Accept-Ranges', 'bytes');
       const ranges = req.range(data.length);
@@ -409,8 +411,13 @@ export class DevServer {
       }
       res.send(data);
     });
-    app.delete('/__wxa__/tmp/:name', (req, res) => {
-      res.status(this.tempFiles.delete(req.params.name) ? 204 : 404).end();
+    app.delete<{ 0: string }>('/__wxa__/tmp/*', (req, res) => {
+      try {
+        this.files.remove('/__wxa__/tmp/' + req.params[0], { dir: false });
+        res.status(204).end();
+      } catch {
+        res.status(404).end();
+      }
     });
 
     if (this.ticketSource) app.use('/__wxa__/api', devtoolsLoginRouter(this.project.appid, this.ticketSource));

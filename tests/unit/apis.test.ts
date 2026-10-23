@@ -3,6 +3,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { FileStore } from '../../packages/core/src/server/FileStore';
 import { createFileSystemApis } from '../../packages/core/src/runtime/host/api/fs';
 import { createMiscApis } from '../../packages/core/src/runtime/host/api/misc';
 import { createNetworkApis } from '../../packages/core/src/runtime/host/api/network';
@@ -286,13 +287,14 @@ describe('网络 API', () => {
 });
 
 describe('文件系统', () => {
-  const apis = createFileSystemApis();
+  const files = new FileStore();
+  const apis = createFileSystemApis(files.execute.bind(files));
 
   it('文件系统 API 与基础库的调用格式一致', () => {
     expect(call(apis, 'access', { path: 'http://usr/x' }).errMsg).toMatch(/^access:fail no such file/);
     expect(call(apis, 'mkdir', { dirPath: 'http://usr/logs', recursive: true }).errMsg).toBe('mkdir:ok');
     call(apis, 'writeFile', { filePath: 'http://usr/logs/1.log', data: 'hello' });
-    expect(call(apis, 'readFileSync', { filePath: 'http://usr/logs/1.log' })).toMatchObject({ data: 'hello' });
+    expect(call(apis, 'readFileSync', { filePath: 'http://usr/logs/1.log', encoding: 'utf8' })).toMatchObject({ data: 'hello' });
     expect(call(apis, 'stat', { path: 'http://usr/logs/1.log' }).stats).toMatchObject({ size: 5 });
     expect(call(apis, 'readdir', { dirPath: 'http://usr/logs' }).files).toEqual(['1.log']);
   });
@@ -344,7 +346,8 @@ describe('读取代码包里的文件', () => {
     };
     const fetchMock = vi.fn(async (url: string) => (files[url] ? new Response(files[url]) : new Response('', { status: 404 })));
     vi.stubGlobal('fetch', fetchMock);
-    return { apis: createFileSystemApis(), fetchMock };
+    const store = new FileStore();
+    return { apis: createFileSystemApis(store.execute.bind(store)), fetchMock };
   }
 
   it('readFile 不指定编码时得到 ArrayBuffer，指定 utf8 时得到文本，路径可以不以 / 开头', async () => {
@@ -364,15 +367,15 @@ describe('读取代码包里的文件', () => {
     expect((await call(apis, 'readFile', { filePath: '/assets/hello.txt', encoding: 'hex' })).errMsg).toMatch(/^readFile:fail /);
   });
 
-  it('用户目录（http://usr/）下的文件只在内存文件系统里找，不向开发服务器取', async () => {
+  it('用户文件只访问文件存储，不向代码包静态资源接口取', async () => {
     const { apis, fetchMock } = setup();
     call(apis, 'writeFile', { filePath: 'http://usr/a.txt', data: 'local' });
-    expect(await call(apis, 'readFile', { filePath: 'http://usr/a.txt' })).toMatchObject({ data: 'local' });
+    expect(await call(apis, 'readFile', { filePath: 'http://usr/a.txt', encoding: 'utf8' })).toMatchObject({ data: 'local' });
     expect((await call(apis, 'readFile', { filePath: 'http://usr/assets/data.bin' })).errMsg).toMatch(/^readFile:fail no such file/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('readFileSync 同步返回，只读内存文件系统：代码包里的文件读不到，也不向开发服务器取', () => {
+  it('readFileSync 同步读取可写文件存储，不读取代码包静态资源', () => {
     const { apis, fetchMock } = setup();
     expect(call(apis, 'readFileSync', { filePath: 'assets/data.bin' }).errMsg).toMatch(/^readFileSync:fail no such file/);
     expect(fetchMock).not.toHaveBeenCalled();

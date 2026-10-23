@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { MemoryFileSystem } from '../../packages/core/src/runtime/host/api/fs';
+import { FileStore } from '../../packages/core/src/server/FileStore';
 import { ApiContext, ApiRegistry } from '../../packages/core/src/runtime/host/api/registry';
 import { createStorageApis, KeyValueStore, MiniProgramStorage } from '../../packages/core/src/runtime/host/api/storage';
 import { PageStack } from '../../packages/core/src/runtime/host/PageStack';
@@ -138,18 +138,18 @@ describe('Storage', () => {
   });
 });
 
-describe('MemoryFileSystem', () => {
+describe('FileStore', () => {
   it('支持 USER_DATA_PATH 风格的路径，递归创建目录后读写文件', () => {
-    const fs = new MemoryFileSystem();
+    const fs = new FileStore();
     fs.mkdir('http://usr/logs/a', true);
     fs.write('http://usr/logs/a/1.log', 'x');
     fs.write('http://usr/logs/a/1.log', 'y', true);
-    expect(fs.read('http://usr/logs/a/1.log')).toBe('xy');
+    expect(fs.read('http://usr/logs/a/1.log').toString()).toBe('xy');
     expect(fs.readdir('http://usr/logs')).toEqual(['a']);
   });
 
   it('父目录不存在、重复创建、删除非空目录时报错', () => {
-    const fs = new MemoryFileSystem();
+    const fs = new FileStore();
     expect(() => fs.write('/a/b.txt', '')).toThrow('no such file or directory');
     fs.mkdir('/a');
     expect(() => fs.mkdir('/a')).toThrow('already exists');
