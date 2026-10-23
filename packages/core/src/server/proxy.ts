@@ -50,7 +50,6 @@ export async function handleProxy(req: Request, res: Response) {
   const controller = new AbortController();
   const cancel = () => controller.abort();
   res.once('close', cancel);
-  req.once('aborted', cancel);
 
   try {
     let upstream: globalThis.Response;
@@ -63,7 +62,7 @@ export async function handleProxy(req: Request, res: Response) {
         signal: controller.signal
       });
     } catch (error) {
-      if (res.destroyed) return;
+      if (res.destroyed || controller.signal.aborted) return;
       const cause = (error as any)?.cause?.message;
       res.status(502).set('x-wxa-proxy-error', '1').send(cause || (error as Error).message);
       return;
@@ -93,6 +92,5 @@ export async function handleProxy(req: Request, res: Response) {
     if (!res.destroyed) res.destroy(error as Error);
   } finally {
     res.off('close', cancel);
-    req.off('aborted', cancel);
   }
 }
