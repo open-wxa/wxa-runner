@@ -39,7 +39,12 @@ html, body { margin: 0; height: 100%; background: radial-gradient(120% 80% at 50
 .wxa-tabbar { flex: none; height: calc(50px + var(--wxa-safe-bottom, 0px)); padding-bottom: var(--wxa-safe-bottom, 0px); display: flex; border-top: .5px solid rgba(0,0,0,.1); box-sizing: border-box; }
 .wxa-tabbar.is-hidden { display: none; }
 .wxa-tabbar-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 10px; cursor: pointer; user-select: none; gap: 2px; }
-.wxa-tabbar-item img { width: 24px; height: 24px; }
+.wxa-tabbar-item img { width: 24px; height: 24px; display: block; }
+.wxa-tabbar-icon, .wxa-tabbar-text { position: relative; }
+.wxa-tabbar-badge { position: absolute; top: -4px; left: calc(100% - 6px); min-width: 16px; height: 16px; padding: 0 5px; box-sizing: border-box; border-radius: 8px; background: #fa5151; color: #fff; font-size: 11px; line-height: 16px; text-align: center; white-space: nowrap; }
+.wxa-tabbar-dot { position: absolute; top: -2px; left: calc(100% - 2px); width: 8px; height: 8px; border-radius: 50%; background: #fa5151; }
+.wxa-tabbar-text > .wxa-tabbar-badge { top: -10px; left: calc(100% + 1px); }
+.wxa-tabbar-text > .wxa-tabbar-dot { top: -3px; left: calc(100% + 1px); }
 .wxa-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
 .wxa-mask { position: absolute; inset: 0; pointer-events: auto; }
 .wxa-mask.is-dim { background: rgba(0,0,0,.5); }

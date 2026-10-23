@@ -526,6 +526,14 @@ export class Host implements HostApi {
     this.shell.setNavigation(page.navigation);
   }
 
+  /** tabBar 显隐改变 tab 页窗口是否贴着屏幕底边，已打开的 tab 页要同步底部安全区 */
+  private setTabBarHidden(hidden: boolean) {
+    this.shell.setTabBarHidden(hidden);
+    for (const page of this.tabPages.values()) {
+      page.setSafeAreaInsets(this.shell.safeAreaInsetsFor(page.path, page.navigation));
+    }
+  }
+
   private registerApis() {
     const routeApi = (handler: (args: any) => Promise<ApiResult>) =>
       (args: any) => this.enqueueRoute(() => handler(args));
@@ -560,7 +568,11 @@ export class Host implements HostApi {
       ...createAudioApis({ emit: (event, data) => this.emitToService(event, data) }),
       ...createMapApis({ registry: this.api, operations: this.mapOperations }),
       ...createLibFileApis({ windowOf: webviewId => this.pages.get(webviewId)?.win }),
-      ...createUiApis({ shell: this.shell, updateNavigation: state => this.updateNavigation(state) }),
+      ...createUiApis({
+        shell: this.shell,
+        updateNavigation: state => this.updateNavigation(state),
+        setTabBarHidden: hidden => this.setTabBarHidden(hidden)
+      }),
       ...createMediaApis({
         showActionSheet: options => this.shell.showActionSheet(options),
         chooseFiles,

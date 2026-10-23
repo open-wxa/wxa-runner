@@ -59,10 +59,13 @@ describe('界面 API', () => {
     hideToast: vi.fn(),
     showModal: vi.fn(async () => ({ confirm: true, cancel: false })),
     showActionSheet: vi.fn(async () => null as number | null),
-    setNavigationLoading: vi.fn()
+    setNavigationLoading: vi.fn(),
+    updateTabBarItem: vi.fn((index: number) => index < 3),
+    updateTabBarStyle: vi.fn()
   };
   const updateNavigation = vi.fn();
-  const apis = createUiApis({ shell: shell as unknown as PhoneShell, updateNavigation });
+  const setTabBarHidden = vi.fn();
+  const apis = createUiApis({ shell: shell as unknown as PhoneShell, updateNavigation, setTabBarHidden });
 
   it('showLoading 是不会自动消失的 loading toast', () => {
     call(apis, 'showLoading', { title: '加载中' });
@@ -84,6 +87,28 @@ describe('界面 API', () => {
     expect(updateNavigation).toHaveBeenLastCalledWith({ backgroundColor: '#ffffff', textStyle: 'black' });
     call(apis, 'setNavigationBarTitle', { title: '新标题' });
     expect(updateNavigation).toHaveBeenLastCalledWith({ title: '新标题' });
+  });
+
+  it('hideTabBar / showTabBar 切换原生 tabBar 的显隐', () => {
+    call(apis, 'hideTabBar', { animation: true });
+    expect(setTabBarHidden).toHaveBeenLastCalledWith(true);
+    call(apis, 'showTabBar');
+    expect(setTabBarHidden).toHaveBeenLastCalledWith(false);
+  });
+
+  it('基础库转来的 setTabBarBadge 按 type 设置徽标、红点或清除', () => {
+    call(apis, 'setTabBarBadge', { index: 2, type: 'text', badgeValue: '9' });
+    expect(shell.updateTabBarItem).toHaveBeenLastCalledWith(2, { mark: { type: 'text', text: '9' } });
+    call(apis, 'setTabBarBadge', { index: 0, type: 'redDot' });
+    expect(shell.updateTabBarItem).toHaveBeenLastCalledWith(0, { mark: { type: 'redDot' } });
+    call(apis, 'setTabBarBadge', { index: 0, type: 'none' });
+    expect(shell.updateTabBarItem).toHaveBeenLastCalledWith(0, { mark: null });
+  });
+
+  it('tabBar 项 index 越界时 fail', () => {
+    expect(call(apis, 'setTabBarBadge', { index: 5, type: 'redDot' })).toEqual({ errMsg: 'setTabBarBadge:fail tabbar item not found' });
+    expect(call(apis, 'setTabBarItem', { index: 5, text: 'x' })).toEqual({ errMsg: 'setTabBarItem:fail tabbar item not found' });
+    expect(call(apis, 'setTabBarItem', { index: 1, text: 'x' })).toBeUndefined();
   });
 });
 

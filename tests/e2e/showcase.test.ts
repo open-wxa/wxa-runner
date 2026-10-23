@@ -142,6 +142,75 @@ describe.skipIf(!e2eReady)('showcase 示例', () => {
     expect(await padding('#detail-inline', 'Top')).toBe('0px');
   });
 
+  it('wx.hideTabBar 隐藏原生 tabBar，页面窗口延伸到屏幕底边，切换 tab 后仍隐藏，wx.showTabBar 恢复', async () => {
+    const frameHeight = async () => (await page.locator('iframe[data-current]').boundingBox())!.height;
+    const safeBottom = () => current().locator('#index-safe-bottom').evaluate(el => getComputedStyle(el).paddingBottom);
+    const tabBarVisible = () => page.isVisible('.wxa-tabbar');
+
+    await open('/?path=pages/lab/lab');
+    // iPhone X：状态栏 44 + 导航栏 44，tabBar 50 + 底部安全区 34
+    expect(await frameHeight()).toBe(812 - 88 - 84);
+
+    await page.evaluate(() => window.__wxa_test_api__.callPageMethod('hideTabBar'));
+    expect(await tabBarVisible()).toBe(false);
+    expect(await frameHeight()).toBe(812 - 88);
+
+    await page.evaluate(() => window.__wxa_test_api__.switchTab('/pages/index/index'));
+    expect(await tabBarVisible()).toBe(false);
+    expect(await safeBottom()).toBe('34px');
+
+    await page.evaluate(() => window.__wxa_test_api__.switchTab('/pages/lab/lab'));
+    await page.evaluate(() => window.__wxa_test_api__.callPageMethod('showTabBar'));
+    expect(await tabBarVisible()).toBe(true);
+    expect(await frameHeight()).toBe(812 - 88 - 84);
+    await page.evaluate(() => window.__wxa_test_api__.switchTab('/pages/index/index'));
+    expect(await safeBottom()).toBe('0px');
+  });
+
+  it('tabBar 徽标、红点、样式和文字可以动态修改', async () => {
+    const item = (pagePath: string) => page.locator(`.wxa-tabbar-item[data-page-path="${pagePath}"]`);
+    const badge = item('pages/mine/mine').locator('.wxa-tabbar-badge');
+    const dot = item('pages/index/index').locator('.wxa-tabbar-dot');
+    // 基础库的 tabBar 接口是异步的，调用页面方法后要等界面和日志更新
+    const callLab = (method: string) => page.evaluate(m => window.__wxa_test_api__.callPageMethod(m), method);
+    const waitForLog = (text: string) => page.waitForFunction(
+      t => (window.__wxa_test_api__.pageData()!.logs as Array<{ text: string }>).some(log => log.text.includes(t)),
+      text
+    );
+
+    await open('/?path=pages/lab/lab');
+    await callLab('setBadge');
+    await waitForLog('setTabBarBadge:ok');
+    expect(await badge.textContent()).toBe('9');
+    await callLab('showRedDot');
+    await waitForLog('showTabBarRedDot:ok');
+    expect(await dot.count()).toBe(1);
+
+    // 切换页面后标记仍在，选中态照常切换
+    await page.click('.wxa-tabbar-item[data-page-path="pages/mine/mine"]');
+    await waitForPage('pages/mine/mine');
+    expect(await badge.textContent()).toBe('9');
+    expect(await item('pages/mine/mine').getAttribute('class')).toContain('is-selected');
+    await page.evaluate(() => window.__wxa_test_api__.switchTab('/pages/lab/lab'));
+
+    await callLab('removeBadge');
+    await waitForLog('removeTabBarBadge:ok');
+    await callLab('hideRedDot');
+    await waitForLog('hideTabBarRedDot:ok');
+    expect(await badge.count()).toBe(0);
+    expect(await dot.count()).toBe(0);
+
+    await callLab('toggleStyle');
+    await waitForLog('setTabBarStyle:ok');
+    expect(await page.locator('.wxa-tabbar').evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(30, 30, 30)');
+    expect(await item('pages/lab/lab').evaluate(el => getComputedStyle(el).color)).toBe('rgb(255, 214, 102)');
+    expect(await item('pages/mine/mine').evaluate(el => getComputedStyle(el).color)).toBe('rgb(187, 187, 187)');
+
+    await callLab('toggleItem');
+    await waitForLog('setTabBarItem:ok');
+    expect(await item('pages/lab/lab').textContent()).toBe('改过的');
+  });
+
   it('自动化环境默认按 1:1 显示手机，截图即真实尺寸', async () => {
     await open();
     expect((await page.locator('.wxa-device').boundingBox())!.height).toBe(812);
