@@ -9,7 +9,7 @@ import path from 'path';
 import { chromium, Frame, LaunchOptions, Page } from 'playwright';
 import { expect } from 'vitest';
 import { listBaseLibs } from '../../packages/extractor/src/baselib';
-import { DevServer } from '../../packages/core/src/server/DevServer';
+import { DevServer, DevServerOptions } from '../../packages/core/src/server/DevServer';
 import { createProject, hasToolchain, REPO_ROOT } from '../helpers';
 
 const RUNTIME_DIR = path.join(REPO_ROOT, 'packages/core/dist/runtime');
@@ -50,6 +50,9 @@ export interface RunnerOptions {
   baseLibCacheDir?: string;
   /** 开启 --devtools-login；不想依赖本机登录态时用 page.route 拦截 /__wxa__/api/* */
   devtoolsLogin?: boolean;
+  forwardConsole?: DevServerOptions['forwardConsole'];
+  /** 开发服务器的终端输出，默认丢弃 */
+  logger?: DevServerOptions['logger'];
 }
 
 export interface Runner {
@@ -73,8 +76,9 @@ export async function startRunner(project: Record<string, string | object> | str
     baseLibVersion: options.baseLibVersion,
     baseLibCacheDir: options.baseLibCacheDir,
     devtoolsLogin: options.devtoolsLogin,
+    forwardConsole: options.forwardConsole,
     runtimeDir: RUNTIME_DIR,
-    logger: { log: () => undefined, warn: () => undefined, error: () => undefined }
+    logger: options.logger ?? { log: () => undefined, warn: () => undefined, error: () => undefined }
   });
   const base = await server.start();
   const browser = await chromium.launch({ ...chromeLaunchOptions, args: options.chromeArgs });
