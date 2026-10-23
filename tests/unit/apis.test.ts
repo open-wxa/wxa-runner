@@ -119,7 +119,7 @@ describe('网络 API', () => {
 
     await vi.waitFor(() => expect(events.length).toBe(2));
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('/__wxa__/proxy?url=' + encodeURIComponent('https://api.example.com/x?y=1'));
+    expect(url).toBe('/__wxa__/proxy/https/api.example.com/x?y=1');
     expect(init.method).toBe('POST');
     expect(init.body).toBe('a=1');
     expect(JSON.parse((init.headers as Record<string, string>)['x-wxa-headers'])).toEqual({ cookie: 'c=1' });
@@ -197,7 +197,7 @@ describe('网络 API', () => {
     call(apis, 'createRequestTask', { url: 'https://plugin.example.com/data', method: 'GET', header, __skipDomainCheck__: true });
 
     await vi.waitFor(() => expect(events.some(([, data]) => data.state === 'success')).toBe(true));
-    expect(fetchMock.mock.calls[0][0]).toBe('/__wxa__/proxy?url=' + encodeURIComponent('https://plugin.example.com/data'));
+    expect(fetchMock.mock.calls[0][0]).toBe('/__wxa__/proxy/https/plugin.example.com/data');
     expect(recorded.map(request => request.url)).toEqual(['https://plugin.example.com/data']);
   });
 
@@ -215,7 +215,7 @@ describe('网络 API', () => {
     const { requestTaskId } = call(apis, 'createRequestTask', audio);
 
     await vi.waitFor(() => expect(events.some(([, data]) => data.state === 'success')).toBe(true));
-    expect(fetchMock.mock.calls[0][0]).toBe('/__wxa__/proxy?url=' + encodeURIComponent('https://cdn.example.com/a.mp3'));
+    expect(fetchMock.mock.calls[0][0]).toBe('/__wxa__/proxy/https/cdn.example.com/a.mp3');
     const success = events.find(([, data]) => data.state === 'success')![1];
     expect(success).toMatchObject({ requestTaskId, statusCode: 200, header: { 'content-type': 'audio/mpeg' } });
     expect(new Uint8Array(success.data)).toEqual(new Uint8Array([1, 2, 255]));

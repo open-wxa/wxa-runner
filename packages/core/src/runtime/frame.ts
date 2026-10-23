@@ -11,6 +11,7 @@
 
 import { hookConsole } from './consoleHook';
 import { installWeixinJSContext } from './context';
+import { PROXY_PREFIX, toServerPath } from './networkPanel';
 import { installApiStubs } from './sdkStubs';
 import type { FrameBridge, FrameKind, HostApi } from './types';
 import { createWeixinWorker } from './workers';
@@ -161,11 +162,11 @@ function createCustomImage(toUrl: (src: string) => string, fromUrl: (url: string
 /**
  * 代码包里的文件由开发服务器在根路径提供。其他域名的图片经代理变成同源：直接加载的话画上去会污染画布，
  * 之后读像素、导出都会失败；加 crossOrigin 又要对方返回 CORS 头，大多数图片服务器不返回。
- * 不解析地址：格式不对的地址照样交给代理，加载失败走 onerror，和原生 Image 一样不在赋值时抛错
+ * 格式不对的地址原样加载，失败时走 onerror，和原生 Image 一样不在赋值时抛错
  */
 function loadableImageUrl(url: string): string {
   if (url.startsWith('/__pageframe__/')) return url.slice('/__pageframe__'.length);
-  if (/^https?:\/\//i.test(url) && !url.startsWith(location.origin + '/')) return `/__wxa__/proxy?url=${encodeURIComponent(url)}`;
+  if (/^https?:\/\//i.test(url) && !url.startsWith(location.origin + '/')) return toServerPath(PROXY_PREFIX, url) ?? url;
   return url;
 }
 

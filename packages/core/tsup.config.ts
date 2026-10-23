@@ -13,9 +13,14 @@ export default defineConfig([
     shims: true,
     external: ['express', 'chokidar', 'ws', 'esbuild', '@open-wxa/wxa-runner-compiler', '@open-wxa/wxa-runner-extractor']
   },
-  // 浏览器端：宿主页面、注入 iframe 的桥、Worker 里的原生接口
+  // 浏览器端：宿主页面、注入 iframe 的桥、Worker 里的原生接口、在 Network 面板里显示被拦截请求的 Service Worker
   {
-    entry: { 'runtime/host': 'src/runtime/host/index.ts', 'runtime/frame': 'src/runtime/frame.ts', 'runtime/worker': 'src/runtime/worker.ts' },
+    entry: {
+      'runtime/host': 'src/runtime/host/index.ts',
+      'runtime/frame': 'src/runtime/frame.ts',
+      'runtime/worker': 'src/runtime/worker.ts',
+      'runtime/sw': 'src/runtime/sw.ts'
+    },
     format: ['iife'],
     platform: 'browser',
     target: 'es2020',

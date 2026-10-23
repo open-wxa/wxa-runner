@@ -63,8 +63,10 @@ HBuilderX 创建的项目，编译产物在 `unpackage/dist/dev/mp-weixin`。改
 - **调用栈**：基础库的代码已加入 DevTools 的忽略列表，报错时的调用栈、单步调试都停在业务代码上，不会跳进基础库
 - **控制台**：`App`、`Page` 的代码运行在逻辑层的 iframe 里。要在控制台里调用 `getCurrentPages()`、`wx.xxx`，
   先把控制台左上角的上下文从 `top` 切换到 `wxa-appservice`（`appservice.html`）
-- **网络**：`wx.request` 由开发服务器转发，在 Network 面板里显示为 `/__wxa__/proxy?url=…`。被 setup 拦截的请求不发出，
-  不会出现在这里，控制台会打印 `[wxa-runner] 拦截请求`
+- **网络**：`wx.request` 由开发服务器转发，在 Network 面板里显示为 `/__wxa__/proxy/https/api.example.com/user/info`，
+  Name 列是接口名，在过滤框输入域名或路径就能找到。被拦截规则拦下的请求不发往网络，显示为 `/__wxa__/mock/https/…`，
+  响应是规则给出的，控制台同时打印 `[wxa-runner] 拦截请求`。拦下的请求靠 Service Worker 显示：第一次打开页面时它还没装好，
+  从下一个请求开始显示；强制刷新（`Shift+Reload`）后、用局域网 IP 访问时不显示，请求本身不受影响
 - **页面结构**：每个页面是一个 iframe，在 Elements 面板里能看到渲染出的节点和样式
 
 ## 基础库和编译器

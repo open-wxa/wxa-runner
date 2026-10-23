@@ -2,15 +2,16 @@
  * 网络 API：wx.request / downloadFile / uploadFile / connectSocket
  *
  * 基础库 3.x 的协议是「创建任务同步返回 taskId，结果通过 on<Type>TaskStateChange 事件推送」。
- * HTTP 请求经开发服务器的 /__wxa__/proxy 转发：既绕开 CORS，也能携带浏览器禁止设置的
- * cookie / referer 等请求头。
+ * HTTP 请求经开发服务器的 /__wxa__/proxy/ 转发：既绕开 CORS，也能携带浏览器禁止设置的
+ * cookie / referer 等请求头。地址的写法见 networkPanel.ts
  *
  * 基础库自己的请求（数据上报、配置拉取等）不发出，只放行 InnerAudioContext 下载音频，见 byCaller。
  */
 
 import type { MockRequest } from '../../../setup';
+import { PROXY_PREFIX, toServerPath } from '../../networkPanel';
 import { ApiHandler, fail, ok } from './registry';
-import type { RequestRoutes } from './routes';
+import type { MockedResponse, RequestRoutes } from './routes';
 import { saveTempFile, tempFileType } from './tempFiles';
 
 export interface NetworkApiOptions {
@@ -21,6 +22,8 @@ export interface NetworkApiOptions {
   routes?: RequestRoutes;
   /** wx.request 发出时调用，早于拦截和转发 */
   onRequest?: (request: RecordedRequest) => void;
+  /** 被拦截的 wx.request 开始生成响应时调用，用来在 Network 面板里显示它（见 mockMirror.ts）；signal 在请求取消、超时时 abort */
+  onMocked?: (request: MockRequest, response: Promise<MockedResponse>, signal: AbortSignal) => void;
 }
 
 /** 小程序发出的一个 wx.request */
@@ -92,9 +95,10 @@ export function createNetworkApis(options: NetworkApiOptions): Record<string, Ap
 
     const requestTaskId = startTask(args, async (signal, id) => {
       try {
-        const mocked = route && await route.respond(signal);
+        const mocked = route?.respond(signal);
+        if (mocked) options.onMocked?.(request, mocked, signal);
         const res: ProxyResponse = mocked
-          ? { statusCode: mocked.statusCode, header: mocked.header, cookies: [], response: new Response(mocked.body) }
+          ? await mocked.then(({ statusCode, header, body }) => ({ statusCode, header, cookies: [], response: new Response(body) }))
           : await proxyFetch(request.url, { method: request.method, header: args.header, body: args.data, signal });
         emit('onRequestTaskStateChange', {
           requestTaskId: id, state: 'headersReceived', header: res.header, statusCode: res.statusCode, cookies: res.cookies
@@ -258,13 +262,13 @@ export async function proxyFetch(
   url: string,
   init: { method: string; header?: Record<string, string>; body?: unknown; signal?: AbortSignal }
 ): Promise<ProxyResponse> {
-  if (!/^https?:\/\//i.test(url)) throw new Error(`invalid url "${url}"`);
+  const path = toServerPath(PROXY_PREFIX, url);
+  if (!path) throw new Error(`invalid url "${url}"`);
 
-  const hasBody = init.body !== undefined && init.body !== '' && !['GET', 'HEAD'].includes(init.method);
-  const response = await fetch(`/__wxa__/proxy?url=${encodeURIComponent(url)}`, {
+  const response = await fetch(path, {
     method: init.method,
     headers: { 'x-wxa-headers': JSON.stringify(init.header || {}) },
-    body: hasBody ? init.body as BodyInit : undefined,
+    body: hasRequestBody(init.method, init.body) ? init.body as BodyInit : undefined,
     signal: init.signal
   });
 
@@ -278,6 +282,11 @@ export async function proxyFetch(
     cookies: JSON.parse(decodeURIComponent(response.headers.get('x-wxa-set-cookie') || '%5B%5D')),
     response
   };
+}
+
+/** fetch 不允许 GET、HEAD 带请求体；空字符串也不发，和不带一样 */
+export function hasRequestBody(method: string, body: unknown): boolean {
+  return body !== undefined && body !== '' && !['GET', 'HEAD'].includes(method);
 }
 
 function reason(error: unknown): string {

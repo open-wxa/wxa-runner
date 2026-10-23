@@ -15,6 +15,7 @@ import { createLibFileApis } from './api/libFiles';
 import { createMapApis, MapOperations } from './api/map';
 import { createMediaApis } from './api/media';
 import { createMiscApis } from './api/misc';
+import { installMockMirror } from './api/mockMirror';
 import { createNetworkApis, RequestLog } from './api/network';
 import { createPickerApis, fetchRegionData } from './api/picker';
 import { RequestRoutes } from './api/routes';
@@ -81,6 +82,8 @@ export class Host implements HostApi {
   readonly storage: MiniProgramStorage;
   /** setup 和测试 API 声明的请求拦截 */
   readonly routes = new RequestRoutes();
+  /** 把被拦截的请求显示在 Network 面板里 */
+  private readonly mockMirror = installMockMirror();
   private readonly mapOperations = new MapOperations((webviewId, event, data) => this.publishToPages(event, data, [webviewId]));
   private service: { win: Window; bridge: FrameBridge } | null = null;
   /** 新版基础库的业务子上下文；旧版基础库业务代码直接在逻辑层 iframe 里 */
@@ -547,7 +550,8 @@ export class Host implements HostApi {
         emit: (event, data) => this.emitToService(event, data),
         defaultTimeout: () => this.info.wxConfig.networkTimeout?.request || 60000,
         routes: this.routes,
-        onRequest: request => this.requests.add(request)
+        onRequest: request => this.requests.add(request),
+        onMocked: (request, response, signal) => this.mockMirror?.show(request, response, signal)
       }),
       ...createAudioApis({ emit: (event, data) => this.emitToService(event, data) }),
       ...createMapApis({ registry: this.api, operations: this.mapOperations }),

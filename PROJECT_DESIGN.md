@@ -100,8 +100,10 @@ wxa-runner/
 │   │       │   ├── wechatDev.ts       # 借开发者登录态访问微信后台：ticket、超时、错误提示统一处理
 │   │       │   ├── plugins.ts         # 插件：借开发者登录态下载插件代码，插件页面并入小程序
 │   │       │   └── developerTicket.ts # --devtools-login 的 ticket：新版开发者工具经自动化接口实时获取
-│   │       └── runtime/               # 浏览器端（打包为 dist/runtime/host.js、frame.js、worker.js）
+│   │       └── runtime/               # 浏览器端（打包为 dist/runtime/host.js、frame.js、worker.js、sw.js）
 │   │           ├── frame.ts           # 注入 iframe：全局变量、WeixinJSBridge、设备尺寸、触摸模拟
+│   │           ├── networkPanel.ts    # 请求在 Network 面板里的地址（/__wxa__/proxy/…、/__wxa__/mock/…），宿主、Service Worker、开发服务器共用
+│   │           ├── sw.ts              # Service Worker：返回被拦截请求的响应，让它们也显示在 Network 面板里
 │   │           ├── context.ts         # 3.7.1 起的基础库：模拟原生 WeixinJSContext，在逻辑层里创建子上下文
 │   │           ├── sdkStubs.ts        # 伴生 SDK（广告等）的占位
 │   │           ├── syncScript.ts      # 同步执行脚本（loadLibFiles）
@@ -584,7 +586,7 @@ WeixinJSBridge.invoke 的实现（宿主）     ← invoke / → callback       
 | `/` | 宿主页面 |
 | `/__wxa__/app-info.json` | 构建信息（`__wxConfig`、页面列表、设备参数、setup）；构建失败时返回 `buildError`，宿主显示错误 |
 | `/__wxa__/setup.js` | 打包后的 setup 文件 |
-| `/__wxa__/runtime/*` | 浏览器运行时（`host.js`、`frame.js`） |
+| `/__wxa__/runtime/*` | 浏览器运行时（`host.js`、`frame.js`、`worker.js`、`sw.js`）；`sw.js` 带 `Service-Worker-Allowed: /`，能接管根路径下的宿主页面 |
 | `/__wxa__/appservice.html?path=&query=` | 逻辑层；`path` 写入 `appLaunchInfo` |
 | `/__wxa__/subcontext.html?id=` | 3.7.1 起逻辑层里的子上下文 |
 | `/__wxa__/webview/<page>.html?id=` | 渲染层 |
@@ -593,7 +595,8 @@ WeixinJSBridge.invoke 的实现（宿主）     ← invoke / → callback       
 | `/__wxa__/service-bootstrap.js`、`/__wxa__/page-frame.js` | 构建产物 |
 | `/__wxa__/service-templates.js`、`page-templates.js`、`page-styles.js` | 两层的模板和渲染层的样式，热更新时重新下发 |
 | `/__baselib__/*` | 基础库；`*.js.map` 是把它加入 DevTools 忽略列表的 source map |
-| `/__wxa__/proxy?url=` | 网络代理 |
+| `/__wxa__/proxy/<协议>/<域名><路径>` | 网络代理，如 `/__wxa__/proxy/https/api.example.com/a?b=1`：原地址写在路径里，Network 面板的 Name 列显示接口名 |
+| `/__wxa__/mock/<协议>/<域名><路径>` | 被拦截请求在 Network 面板里的地址，由 Service Worker 返回拦截规则给出的响应；到达服务器说明 Service Worker 没生效，返回 503 |
 | `/__wxa__/tmp` | 临时文件：`POST ?type=png` 保存，返回可直接访问的地址；对该地址 `HEAD` 查大小、`DELETE` 删除；随服务器进程存在 |
 | `/__wxa__/region/<districts\|streets>` | 地区选择器用的行政区划数据，取自本机开发者工具 |
 | `/__wxa__/api/*` | `--devtools-login`：`wx.login` 的 code、手机号，服务市场、插件校验和插件信息的转发，只允许本机访问 |
@@ -604,6 +607,14 @@ WeixinJSBridge.invoke 的实现（宿主）     ← invoke / → callback       
 禁止设置的请求头因此也能带上；响应头和 `set-cookie` 以 URL 编码的 JSON 返回。代理只监听本机地址，
 用于开发环境。只转发小程序自己的请求：基础库自己的请求（数据上报、配置拉取等，带 `__skipDomainCheck__` 标记）
 直接按失败返回，不发往网络，也不记入 `requests()`。唯一的例外是 InnerAudioContext 下载音频（见「原生组件」），同样不记入 `requests()`。
+
+**Network 面板**（`runtime/networkPanel.ts`）：原地址写在代理的路径里而不是查询参数里，Name 列才显示接口名，按域名、路径过滤也直接可用。
+被拦截的请求不经代理，为了也能在面板里看到，宿主照原请求再发一个 `/__wxa__/mock/…` 的同源请求，Service Worker（`runtime/sw.ts`）拦下它，
+经 MessagePort 向宿主要拦截规则给出的响应（`host/api/mockMirror.ts`）。这个请求只用于显示，小程序拿到的结果不经过 Service Worker，
+所以 Service Worker 没接管页面时（首次打开、强制刷新、局域网地址不是安全上下文）只是不显示，请求照常完成。
+显示地址用同源的 `/__wxa__/mock/` 而不是原地址：Service Worker 没拦下时（DevTools 勾选了 Bypass for network）只会打到开发服务器，不会把本该拦截的请求发到真实后端。
+Service Worker 用 Static Routing API 让其余请求直接走网络，不经过它。自动化测试（`navigator.webdriver`）里不注册：测试不看面板，
+而且经过 Service Worker 的请求 Playwright 的 `page.route` 拦不到。
 
 ---
 

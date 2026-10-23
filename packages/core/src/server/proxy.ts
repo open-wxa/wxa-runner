@@ -1,6 +1,7 @@
 /**
  * 网络代理：浏览器端的 wx.request 经由这里转发到真实服务器
  *
+ * - 原地址写在路径里：/__wxa__/proxy/https/api.example.com/a?b=1（见 networkPanel.ts）
  * - 绕开 CORS
  * - 小程序设置的请求头放在 x-wxa-headers（JSON）里传过来，
  *   这样 cookie / referer / user-agent 等浏览器禁止设置的头也能带上
@@ -8,16 +9,21 @@
  */
 
 import type { Request, Response } from 'express';
+import { fromServerPath, PROXY_PREFIX } from '../runtime/networkPanel';
 
 // fetch 不允许或无意义的请求头
 const DROPPED_REQUEST_HEADERS = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'keep-alive', 'upgrade', 'expect']);
 // 响应体已被解压/重新分块，这些头不再成立
 const DROPPED_RESPONSE_HEADERS = new Set(['content-encoding', 'content-length', 'transfer-encoding', 'connection', 'set-cookie']);
 
+/**
+ * 用 app.use 挂在 PROXY_PREFIX 下。原地址从未解码的 originalUrl 取：解码后路径里的 %2F 等会变成别的地址。
+ * 不能用 app.all('/__wxa__/proxy/*')：Express 会先解码 * 匹配的部分，地址里有单独的 %（如 /discount/50%）时直接报错
+ */
 export async function handleProxy(req: Request, res: Response) {
-  const target = String(req.query.url || '');
-  if (!/^https?:\/\//i.test(target)) {
-    res.status(400).set('x-wxa-proxy-error', '1').send(`invalid url "${target}"`);
+  const target = fromServerPath(PROXY_PREFIX, req.originalUrl);
+  if (!target) {
+    res.status(400).set('x-wxa-proxy-error', '1').send(`invalid url "${req.originalUrl}"`);
     return;
   }
 

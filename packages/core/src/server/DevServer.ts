@@ -11,7 +11,8 @@
  *   /__wxa__/service-templates.js、page-templates.js  两层的模板（热更新时重新下发）
  *   /__wxa__/page-styles.js    渲染层的样式（热更新时重新下发）
  *   /__baselib__/*             官方基础库
- *   /__wxa__/proxy?url=        网络代理
+ *   /__wxa__/proxy/<协议>/<域名><路径>  网络代理，如 /__wxa__/proxy/https/api.example.com/a?b=1
+ *   /__wxa__/mock/<协议>/<域名><路径>   被拦截的请求在 Network 面板里的地址，由 Service Worker（runtime/sw.js）返回响应
  *   /__wxa__/tmp               临时文件：POST ?type=png 保存，返回可直接访问的地址（GET 支持分段请求）；对该地址 HEAD 查大小、DELETE 删除
  *   /__wxa__/region/<kind>     地区选择器用的行政区划数据（districts / streets），取自本机开发者工具
  *   /__wxa__/api/*             --devtools-login：wx.login 的 code、手机号，服务市场、插件的请求转发，只允许本机访问
@@ -30,6 +31,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { readRegionData, resolveBaseLib, ResolvedBaseLib, usesIsolatedContext } from '@open-wxa/wxa-runner-extractor';
 import { AppBuilder } from '../project/AppBuilder';
 import { MiniProgram } from '../project/MiniProgram';
+import { MOCK_PREFIX, PROXY_PREFIX } from '../runtime/networkPanel';
 import type { AppInfo, DeviceProfile, ForwardConsole } from '../runtime/types';
 import { appserviceHtml, hostHtml, pluginWebviewHtml, subcontextHtml, webviewHtml, workerScript } from './html';
 import { ignoreListSourceMap } from './ignoreList';
@@ -322,7 +324,13 @@ export class DevServer {
       if (!fs.existsSync(file)) return next();
       res.type('json').send(ignoreConsoleHook(fs.readFileSync(file, 'utf8')));
     });
-    app.use('/__wxa__/runtime', express.static(this.runtimeDir(), { cacheControl: false }));
+    app.use('/__wxa__/runtime', express.static(this.runtimeDir(), {
+      cacheControl: false,
+      // Service Worker 默认只能接管自己所在目录下的页面，宿主页面在根路径
+      setHeaders: (res, file) => {
+        if (path.basename(file) === 'sw.js') res.setHeader('Service-Worker-Allowed', '/');
+      }
+    }));
     // 基础库脚本加入 DevTools 的忽略列表，原始代码就是脚本本身（换个地址，免得和脚本混为一个文件）
     const sourceMaps = new Map<string, string>();
     app.get(/^\/__baselib__\/(.+\.js)\.map$/, (req, res, next) => {
@@ -337,7 +345,13 @@ export class DevServer {
         if (file.endsWith('.js')) res.setHeader('SourceMap', `${path.basename(file)}.map`);
       }
     }));
-    app.all('/__wxa__/proxy', express.raw({ type: () => true, limit: '100mb' }), handleProxy);
+    // 用 app.use 而不是 app.all('…/*')：后者会先解码路径，见 handleProxy
+    app.use(PROXY_PREFIX, express.raw({ type: () => true, limit: '100mb' }), handleProxy);
+    // 被拦截的请求本该由 Service Worker 返回响应，到这里说明它没有生效
+    app.use(MOCK_PREFIX, (_req, res) => {
+      res.status(503).type('text').send('这个请求已被拦截规则拦下，这里只用于在 Network 面板里显示它。'
+        + 'Service Worker 没有生效（如 DevTools 勾选了 Bypass for network），看不到拦截规则给出的响应');
+    });
 
     // 返回完整的 http 地址：image、video 组件只原样使用 http(s) 地址，其余的会被当成页面相对路径
     app.post('/__wxa__/tmp', express.raw({ type: () => true, limit: '100mb' }), (req, res) => {

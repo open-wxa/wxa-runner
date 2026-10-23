@@ -42,6 +42,18 @@ describe.skipIf(!ready)('DevServer', () => {
     expect((await get('/__wxa__/runtime/host.js')).status).toBe(200);
   });
 
+  it('Service Worker 脚本允许接管根路径下的宿主页面', async () => {
+    const res = await get('/__wxa__/runtime/sw.js');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('service-worker-allowed')).toBe('/');
+  });
+
+  it('被拦截请求的显示地址没被 Service Worker 拦下时，返回 503 说明原因，不转发到原地址', async () => {
+    const res = await fetch(base + '/__wxa__/mock/https/api.example.com/api/order', { method: 'POST', body: '{}' });
+    expect(res.status).toBe(503);
+    expect(await res.text()).toMatch(/Service Worker 没有生效/);
+  });
+
   it('app-info 返回页面、基础库版本和 __wxConfig', async () => {
     const appJson = JSON.parse(fs.readFileSync(path.join(EXAMPLES, 'showcase/app.json'), 'utf8'));
     const info = await (await get('/__wxa__/app-info.json')).json();
