@@ -4,7 +4,7 @@
  * 是否把浏览器里的 console.warn / console.error 转发到终端：编程助手自己启动开发服务器时，只看得到终端输出，
  * 所以检测到编程助手时默认转发；人在自己的终端里启动时用浏览器的开发者工具看，默认只转发报错。
  *
- * --inspect 从用户项目里加载检查器。
+ * --extension 从用户项目里加载开发服务器扩展。
  */
 
 import { ChildProcess, spawn } from 'child_process';
@@ -72,23 +72,40 @@ describe.skipIf(!ready)('wxa-runner dev：转发浏览器的控制台输出', ()
   });
 });
 
-describe.skipIf(!ready)('wxa-runner dev --inspect', () => {
-  it('从当前目录的项目里加载检查器，挂上它的中间件，启动信息给出检查器地址', async () => {
-    const cwd = createProject({
-      'node_modules/@open-wxa/wxa-inspector/package.json': { name: '@open-wxa/wxa-inspector', main: 'index.js' },
-      'node_modules/@open-wxa/wxa-inspector/index.js': `
-        exports.SHELL_PATH = '/__fake-inspector__/';
-        exports.inspector = ({ markers }) => ({
-          middlewares: [{ path: '/__fake-inspector__', handler: (req, res) => res.end('markers=' + markers) }]
-        });`
-    });
-    const banner = await startDev(['--inspect'], {}, cwd);
-    const url = /检查器\s+(\S+)/.exec(banner)?.[1];
-    expect(url).toMatch(/\/__fake-inspector__\/$/);
-    expect(await (await fetch(url!)).text()).toBe('markers=wxml');
+describe.skipIf(!ready)('wxa-runner dev --extension', () => {
+  /** 一个装在项目 node_modules 里的扩展：默认导出返回扩展的函数，页面上回显 setup 收到的小程序根目录 */
+  const projectWithExtension = () => createProject({
+    'node_modules/fake-ext/package.json': { name: 'fake-ext', main: 'index.js' },
+    'node_modules/fake-ext/index.js': `
+      module.exports = () => ({
+        name: 'fake-ext',
+        setup: ({ root }) => ({
+          middlewares: [{ path: '/__fake__', handler: (req, res) => res.end('root=' + root) }],
+          entry: { label: '假扩展', path: '/__fake__/' }
+        })
+      });`,
+    'local-ext.js': `exports.default = { name: 'local', setup: () => ({ entry: { label: 'local', path: '/__local__/' } }) };`
   });
 
-  it('没有安装检查器时说明安装方法并退出', async () => {
-    await expect(startDev(['--inspect'], {}, createProject({}))).rejects.toThrow(/@open-wxa\/wxa-inspector/);
+  it('从当前目录的项目加载扩展，挂上它的中间件，启动信息给出扩展页面的地址', async () => {
+    const banner = await startDev(['--extension', 'fake-ext'], {}, projectWithExtension());
+    const url = /假扩展\s+(\S+)/.exec(banner)?.[1];
+    expect(url).toMatch(/\/__fake__\/$/);
+    expect(await (await fetch(url!)).text()).toBe(`root=${path.join(EXAMPLES, 'showcase')}`);
+  });
+
+  it('可以写多次，也可以是文件路径', async () => {
+    const banner = await startDev(['--extension', 'fake-ext', '--extension', './local-ext.js'], {}, projectWithExtension());
+    expect(banner).toMatch(/假扩展\s+\S+\/__fake__\//);
+    expect(banner).toMatch(/local\s+\S+\/__local__\//);
+  });
+
+  it('找不到扩展时说明安装方法并退出', async () => {
+    await expect(startDev(['--extension', 'missing-ext'], {}, createProject({}))).rejects.toThrow(/找不到扩展 missing-ext[\s\S]*npm i -D missing-ext/);
+  });
+
+  it('模块不是扩展时说明要求', async () => {
+    const cwd = createProject({ 'not-ext.js': 'module.exports = { hello: 1 };' });
+    await expect(startDev(['--extension', './not-ext.js'], {}, cwd)).rejects.toThrow(/不是 wxa-runner 的扩展/);
   });
 });

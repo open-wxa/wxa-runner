@@ -1,5 +1,5 @@
 /**
- * 开发服务器给开发工具的扩展点：webviewScripts、middlewares、wxmlTransform
+ * 开发服务器给开发工具的扩展点：webviewScripts、middlewares、wxmlTransform，以及把它们打包在一起的扩展（extensions）
  */
 
 import fs from 'fs';
@@ -9,6 +9,7 @@ import { WebSocket } from 'ws';
 import { AppBuilder } from '../../packages/core/src/project/AppBuilder';
 import { MiniProgram } from '../../packages/core/src/project/MiniProgram';
 import { DevServer, DevServerOptions } from '../../packages/core/src/server/DevServer';
+import type { DevServerExtension } from '../../packages/core/src/server/extensions';
 import { pluginWebviewHtml } from '../../packages/core/src/server/html';
 import type { AppBuild, PluginCode } from '../../packages/core/src/server/plugins';
 import { createProject, EXAMPLES, hasToolchain, REPO_ROOT } from '../helpers';
@@ -176,6 +177,77 @@ describe.skipIf(!hasToolchain())('wxmlTransform', () => {
       vi.unstubAllEnvs();
     }
     expect(fs.existsSync(mirror)).toBe(false);
+  });
+});
+
+describe.skipIf(!ready)('extensions', () => {
+  const text = (handlerText: string) => ({ handler: (_req: unknown, res: { end(body: string): void }) => res.end(handlerText) });
+
+  it('setup 收到项目目录和小程序根目录；中间件、脚本按顺序合并在直接给出的选项之后；入口按扩展的顺序', async () => {
+    const contexts: unknown[] = [];
+    const extension = (name: string): DevServerExtension => ({
+      name,
+      setup: context => {
+        contexts.push(context);
+        return {
+          webviewScripts: [{ src: `/__${name}__/runtime.js` }],
+          middlewares: [{ path: `/__${name}__`, ...text(name) }, { path: '/__shared__', ...text(name) }],
+          entry: { label: name, path: `/__${name}__/` }
+        };
+      }
+    });
+    vi.stubEnv('WXA_BASELIB', '');
+    const server = createServer({
+      webviewScripts: [{ src: '/__base__/runtime.js' }],
+      middlewares: [{ path: '/__shared__', ...text('base') }],
+      extensions: [extension('one'), extension('two')]
+    });
+    const base = await server.start();
+    try {
+      const showcase = path.join(EXAMPLES, 'showcase');
+      expect(contexts).toEqual([{ projectPath: showcase, root: showcase }, { projectPath: showcase, root: showcase }]);
+      expect(await (await fetch(`${base}/__two__/`)).text()).toBe('two');
+      // 同一路径先挂的先处理
+      expect(await (await fetch(`${base}/__shared__/`)).text()).toBe('base');
+      const html = await (await fetch(`${base}/__wxa__/webview/pages/index/index.html?id=1`)).text();
+      const order = ['/__base__/', '/__one__/', '/__two__/'].map(prefix => html.indexOf(`${prefix}runtime.js`));
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+      expect(order[0]).toBeGreaterThan(0);
+      expect(server.extensionEntries).toEqual([
+        { name: 'one', label: 'one', path: '/__one__/' },
+        { name: 'two', label: 'two', path: '/__two__/' }
+      ]);
+    } finally {
+      await server.close();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('wxml 转换按顺序串起来：后面的转换拿到前面的结果', async () => {
+    const seen: string[] = [];
+    const builder = createServer({
+      wxmlTransform: code => code.replace(/<view/g, '<view data-a="1"'),
+      extensions: [{
+        name: 'second',
+        setup: () => ({
+          wxmlTransform: (code, file) => {
+            if (file === 'pages/index/index.wxml') seen.push(code);
+            return code.replace(/data-a="1"/g, 'data-a="1" data-b="2"');
+          }
+        })
+      }]
+    }).builder;
+    const build = await builder.build();
+    expect(seen[0]).toContain('data-a="1"');
+    expect(build.pageTemplates).toContain("'data-b'");
+    builder.dispose();
+  });
+
+  it('扩展的中间件路径同样校验；setup 出错时报出是哪个扩展', () => {
+    expect(() => createServer({ extensions: [{ name: 'bad', setup: () => ({ middlewares: [{ path: '/__wxa__/x', ...text('') }] }) }] }))
+      .toThrow(/中间件路径/);
+    expect(() => createServer({ extensions: [{ name: 'broken', setup: () => { throw new Error('缺少配置'); } }] }))
+      .toThrow('扩展 broken 初始化失败：缺少配置');
   });
 });
 

@@ -19,7 +19,7 @@
  *   /__wxa__/region/<kind>     地区选择器用的行政区划数据（districts / streets），取自本机开发者工具
  *   /__wxa__/api/*             --devtools-login：wx.login 的 code、手机号，服务市场、插件的请求转发，只允许本机访问
  *   /__wxa__/ws                文件变化通知：热更新（hot）或整页刷新（reload）；开启 forwardConsole 时浏览器从这里发来报错
- *   options.middlewares        调用方挂载的路径，排在 runner 自己的路由之前
+ *   middlewares / 扩展挂载的路径  排在 runner 自己的路由之前
  *   其余路径                    小程序目录下的静态资源
  */
 
@@ -48,6 +48,7 @@ import { devtoolsLoginRouter } from './devtoolsLogin';
 import { requireUsableTicket, WechatDevClient } from './wechatDev';
 import { bundleSetup, collectSetupEnv, findSetupFile } from './setup';
 import { ProjectWatcher, watchProject } from './watcher';
+import { applyExtensions, DevServerExtension, ExtensionEntry } from './extensions';
 
 /** 注入每个渲染层页面的脚本，src 与 content 二选一 */
 export type WebviewScript = ({ src: string; content?: never } | { content: string; src?: never }) & {
@@ -108,6 +109,8 @@ export interface DevServerOptions {
    * 不能改变行数，编译错误和热更新才能对应到源文件；相同输入要返回相同输出。源文件不会被修改
    */
   wxmlTransform?: (code: string, file: string) => string;
+  /** 开发服务器扩展：把上面几个扩展点打包在一起的开发工具，按顺序合并在直接给出的选项之后，见 extensions.ts */
+  extensions?: DevServerExtension[];
   logger?: Pick<Console, 'log' | 'warn' | 'error'>;
 }
 
@@ -128,6 +131,8 @@ export class DevServer {
   readonly baseLib: ResolvedBaseLib;
   /** 生效的 setup 文件绝对路径，没有时为 null */
   readonly setupFile: string | null;
+  /** 扩展提供的页面，按扩展的顺序 */
+  readonly extensionEntries: ExtensionEntry[];
   private readonly setupEnv: Record<string, string>;
   private readonly device: DeviceProfile;
   private readonly logger: Pick<Console, 'log' | 'warn' | 'error'>;
@@ -144,10 +149,18 @@ export class DevServer {
   private readonly ticketSource: TicketSource | null;
   private readonly plugins: PluginStore;
 
+  /** 选项里直接给出的扩展点与各个扩展合并后的结果 */
+  private readonly webviewScripts: WebviewScript[];
+  private readonly middlewares: DevServerMiddleware[];
+
   constructor(private readonly options: DevServerOptions) {
     this.logger = options.logger || console;
-    options.middlewares?.forEach(({ path: mountPath }) => assertMountPath(mountPath));
     this.project = new MiniProgram(path.resolve(options.projectPath));
+    const extended = applyExtensions(options, options.extensions ?? [], { projectPath: this.project.projectPath, root: this.project.root });
+    extended.middlewares.forEach(({ path: mountPath }) => assertMountPath(mountPath));
+    this.webviewScripts = extended.webviewScripts;
+    this.middlewares = extended.middlewares;
+    this.extensionEntries = extended.entries;
     this.baseLib = resolveBaseLib({ version: options.baseLibVersion, cacheDir: options.baseLibCacheDir });
     if (!this.baseLib.compatible) {
       this.logger.warn(`[wxa-runner] 基础库 ${this.baseLib.version} 高于已验证的版本范围，可能无法正常运行`);
@@ -159,7 +172,7 @@ export class DevServer {
     this.ticketSource = this.devtoolsLogin ? developerTicketSource(this.project.projectPath, this.logger) : null;
     this.plugins = new PluginStore(this.ticketSource && new WechatDevClient(this.project.appid, this.ticketSource), this.logger);
     this.device = { ...DEFAULT_DEVICE, ...options.device };
-    this.builder = new AppBuilder(this.project, { wxmlTransform: options.wxmlTransform });
+    this.builder = new AppBuilder(this.project, { wxmlTransform: extended.wxmlTransform });
     this.setupFile = resolveSetupFile(options.setup, this.project.projectPath);
     this.setupEnv = collectSetupEnv(process.env);
     this.app = this.createApp();
@@ -239,7 +252,7 @@ export class DevServer {
     const root = this.project.root;
     const noStore = (res: Response) => res.setHeader('Cache-Control', 'no-store');
 
-    for (const { path: mountPath, handler } of this.options.middlewares ?? []) {
+    for (const { path: mountPath, handler } of this.middlewares) {
       app.use(mountPath, (req, res, next) => handler(req, res, next));
     }
 
@@ -306,7 +319,7 @@ export class DevServer {
       const pagePath = decodeURIComponent(req.params[0]);
       if (!build.pages.includes(pagePath)) return next();
       const pluginPage = findPluginPage(build, pagePath);
-      const scripts = this.options.webviewScripts ?? [];
+      const scripts = this.webviewScripts;
       res.type('html').send(pluginPage
         ? pluginWebviewHtml(build, pluginPage.plugin, pluginPage.innerPath, pagePath, Number(req.query.id), { scripts })
         : webviewHtml(build, pagePath, Number(req.query.id), { hot: this.hotEnabled, scripts }));

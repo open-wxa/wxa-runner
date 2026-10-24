@@ -91,6 +91,7 @@ wxa-runner/
 │   │       │   └── wxConfig.ts        # 生成 __wxConfig
 │   │       ├── server/
 │   │       │   ├── DevServer.ts       # HTTP 路由、WebSocket、文件变化后重新编译并通知浏览器
+│   │       │   ├── extensions.ts      # 开发服务器扩展：合并开发工具提供的扩展点
 │   │       │   ├── watcher.ts         # 文件监听：合并一次保存的改动，内容没变的不算
 │   │       │   ├── hmr.ts             # 改动能否热更新
 │   │       │   ├── html.ts            # 宿主 / 逻辑层 / 渲染层 HTML，Worker 的入口脚本
@@ -621,7 +622,7 @@ Service Worker 用 Static Routing API 让其余请求直接走网络，不经过
 
 ## 开发工具扩展点
 
-检查器（[wxa-inspector](https://github.com/open-wxa/wxa-inspector)）这类开发工具通过 `DevServer` 的三个选项接入，runner 不认识具体的工具：
+开发工具（如元素检查器 [wxa-inspector](https://github.com/open-wxa/wxa-inspector)）通过三个扩展点接入，runner 不认识具体的工具：
 
 | 选项 | 作用 |
 | --- | --- |
@@ -629,7 +630,13 @@ Service Worker 用 Static Routing API 让其余请求直接走网络，不经过
 | `middlewares` | 挂在 HTTP 服务上的路由，排在 runner 自己的路由之前，`req.url` 去掉了前缀，不处理时 `next()` 交回 runner。不能挂在 `/`，也不能占用 `/__wxa__`、`/__baselib__`、`/__plugin__` |
 | `wxmlTransform` | wxml 交给 wcc 之前的转换。wcc 只接收路径、自己读文件，所以转换结果写进临时镜像目录（`project/WxmlMirror.ts`），只重新转换内容变了的文件，项目里删掉的文件同时删掉；转换不能改变行数，编译错误才能指向源文件 |
 
-命令行的 `--inspect` 从用户项目（项目目录、当前目录，最后是 runner 自身）加载 `@open-wxa/wxa-inspector`，把 `inspector()` 的返回值展开进这三个选项。
+**扩展**（`server/extensions.ts`）：开发工具把要用的扩展点打包成一个扩展 `{ name, setup(context) }`。`setup` 收到项目目录和小程序根目录，
+返回 `webviewScripts`、`middlewares`、`wxmlTransform`，以及可选的 `entry`（扩展自己的页面）。`DevServer` 的 `extensions` 选项接收扩展，
+按顺序合并在直接给出的选项之后：脚本和中间件依次拼接，wxml 转换依次串起来。「插件」在 runner 里指小程序插件，所以这里叫扩展。
+
+命令行的 `--extension <模块>` 从用户项目（项目目录、当前目录，最后是 runner 自身）加载扩展——它是用户项目的开发依赖，
+pnpm 不提升依赖时从 runner 的安装位置找不到。模块的默认导出可以是扩展，也可以是不带参数调用后返回扩展的函数。
+扩展的 `entry` 打印在启动信息里，`--open` 打开第一个。
 
 **开发工具可以依赖的约定**：除了这三个选项，开发工具还依赖下面这些运行时行为。改动它们等于破坏开发工具，
 所以都有测试守着（`tests/e2e/devTools.test.ts` 在各个已验证的基础库上跑，`tests/integration/devServerExtensions.test.ts`）：
