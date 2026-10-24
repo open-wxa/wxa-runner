@@ -32,15 +32,19 @@ program
   .option('--forward-console', '浏览器里的 console.warn / console.error 也转发到终端（检测到编程助手时默认开启）')
   .option('--no-forward-console', '浏览器里的报错不转发到终端')
   .option('--devtools-login', '借本机微信开发者工具的登录态访问微信后台：真实的 code 和手机号、服务市场、插件')
+  .option('--inspect', '启用检查器：点选页面元素，在编辑器里打开对应的 wxml（需要安装 @open-wxa/wxa-inspector）')
   // 旧名，开发服务器会提示改用 --devtools-login
   .addOption(new Option('--real-login').hideHelp())
   .action(async (projectPath, options) => {
     const { DevServer } = require('@open-wxa/wxa-runner-core');
+    const resolvedProjectPath = path.resolve(process.cwd(), projectPath);
 
     try {
+      const inspector = options.inspect ? loadInspector(resolvedProjectPath) : null;
       const forward = await resolveForwardConsole(options.forwardConsole);
       const server = new DevServer({
-        projectPath: path.resolve(process.cwd(), projectPath),
+        projectPath: resolvedProjectPath,
+        ...inspector?.inspector({ projectPath: resolvedProjectPath, markers: 'wxml' }),
         port: options.port === undefined ? undefined : parseInt(options.port, 10),
         host: options.host === true ? '0.0.0.0' : options.host,
         baseLibVersion: options.baselib,
@@ -55,6 +59,8 @@ program
       console.log('');
       console.log(chalk.green('  wxa-runner 已启动'));
       console.log(`  地址      ${chalk.cyan(url)}`);
+      const inspectorUrl = inspector && url + inspector.SHELL_PATH;
+      if (inspectorUrl) console.log(`  检查器    ${chalk.cyan(inspectorUrl)}`);
       const networkUrls = server.networkUrls;
       if (networkUrls.length === 0) {
         console.log(`  局域网    ${chalk.gray('加 --host 开放局域网访问')}`);
@@ -66,7 +72,7 @@ program
       if (server.setupFile) console.log(`  setup     ${server.setupFile}`);
       console.log('');
 
-      if (options.open) openBrowser(url);
+      if (options.open) openBrowser(inspectorUrl || url);
 
       const shutdown = () => server.close().then(() => process.exit(0));
       process.on('SIGINT', shutdown);
@@ -115,6 +121,25 @@ baselib
  * 没指定 --forward-console / --no-forward-console 时：编程助手自己启动开发服务器时只看得到终端，
  * console.warn / console.error 也转发；人在自己的终端里启动时用浏览器的开发者工具看，只转发报错
  */
+/**
+ * --inspect 用的检查器。它装在用户项目里，从 wxa-runner 自己的安装位置不一定找得到（如 pnpm 不提升依赖时），
+ * 所以依次从项目目录、当前目录、wxa-runner 自身查找；都找不到时说明安装方法并退出
+ */
+function loadInspector(projectPath) {
+  const { createRequire } = require('module');
+  for (const base of [path.join(projectPath, 'package.json'), path.join(process.cwd(), 'package.json'), __filename]) {
+    let resolved;
+    try {
+      resolved = createRequire(base).resolve('@open-wxa/wxa-inspector');
+    } catch {
+      continue;
+    }
+    return require(resolved);
+  }
+  console.error(chalk.red('\n--inspect 需要安装检查器：'), chalk.cyan('npm i -D @open-wxa/wxa-inspector'));
+  process.exit(1);
+}
+
 async function resolveForwardConsole(option) {
   if (option === false) return { mode: false };
   if (option === true) return { mode: 'all' };

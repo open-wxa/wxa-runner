@@ -1,15 +1,17 @@
 /**
- * 命令行 dev：是否把浏览器里的 console.warn / console.error 转发到终端
+ * 命令行 dev
  *
- * 编程助手自己启动开发服务器时，只看得到终端输出，所以检测到编程助手时默认转发；
- * 人在自己的终端里启动时用浏览器的开发者工具看，默认只转发报错。
+ * 是否把浏览器里的 console.warn / console.error 转发到终端：编程助手自己启动开发服务器时，只看得到终端输出，
+ * 所以检测到编程助手时默认转发；人在自己的终端里启动时用浏览器的开发者工具看，默认只转发报错。
+ *
+ * --inspect 从用户项目里加载检查器。
  */
 
 import { ChildProcess, spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { EXAMPLES, hasToolchain, REPO_ROOT } from '../helpers';
+import { createProject, EXAMPLES, hasToolchain, REPO_ROOT } from '../helpers';
 
 const CLI = path.join(REPO_ROOT, 'packages/cli/bin/wxa-runner.js');
 const ready = hasToolchain() && fs.existsSync(path.join(REPO_ROOT, 'packages/core/dist/runtime/host.js'));
@@ -20,9 +22,10 @@ const AGENT_ENV = /^(AI_AGENT|CLAUDECODE|CLAUDE_CODE|CODEX_|CURSOR_|GEMINI_CLI|O
 const running: ChildProcess[] = [];
 
 /** 启动 dev，返回启动信息（打印到基础库那一行为止） */
-function startDev(args: string[], env: Record<string, string> = {}): Promise<string> {
+function startDev(args: string[], env: Record<string, string> = {}, cwd?: string): Promise<string> {
   const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !AGENT_ENV.test(key)));
   const child = spawn(process.execPath, [CLI, 'dev', path.join(EXAMPLES, 'showcase'), '--no-watch', '--port', '0', ...args], {
+    cwd,
     env: { ...baseEnv, WXA_BASELIB: '', FORCE_COLOR: '0', ...env }
   });
   running.push(child);
@@ -66,5 +69,26 @@ describe.skipIf(!ready)('wxa-runner dev：转发浏览器的控制台输出', ()
     const line = consoleLine(await startDev(['--no-forward-console'], { AI_AGENT: 'test-agent' }));
     expect(line).toContain('不转发');
     expect(line).not.toContain('test-agent');
+  });
+});
+
+describe.skipIf(!ready)('wxa-runner dev --inspect', () => {
+  it('从当前目录的项目里加载检查器，挂上它的中间件，启动信息给出检查器地址', async () => {
+    const cwd = createProject({
+      'node_modules/@open-wxa/wxa-inspector/package.json': { name: '@open-wxa/wxa-inspector', main: 'index.js' },
+      'node_modules/@open-wxa/wxa-inspector/index.js': `
+        exports.SHELL_PATH = '/__fake-inspector__/';
+        exports.inspector = ({ markers }) => ({
+          middlewares: [{ path: '/__fake-inspector__', handler: (req, res) => res.end('markers=' + markers) }]
+        });`
+    });
+    const banner = await startDev(['--inspect'], {}, cwd);
+    const url = /检查器\s+(\S+)/.exec(banner)?.[1];
+    expect(url).toMatch(/\/__fake-inspector__\/$/);
+    expect(await (await fetch(url!)).text()).toBe('markers=wxml');
+  });
+
+  it('没有安装检查器时说明安装方法并退出', async () => {
+    await expect(startDev(['--inspect'], {}, createProject({}))).rejects.toThrow(/@open-wxa\/wxa-inspector/);
   });
 });
