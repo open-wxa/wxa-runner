@@ -87,6 +87,7 @@ wxa-runner/
 │   │       ├── project/
 │   │       │   ├── MiniProgram.ts     # 读取 app.json / 页面与组件 json、收集组件、列文件
 │   │       │   ├── AppBuilder.ts      # 生成逻辑层 / 渲染层产物，按类型增量
+│   │       │   ├── WxmlMirror.ts      # wxmlTransform 的镜像目录（wcc 从这里读转换后的 wxml）
 │   │       │   └── wxConfig.ts        # 生成 __wxConfig
 │   │       ├── server/
 │   │       │   ├── DevServer.ts       # HTTP 路由、WebSocket、文件变化后重新编译并通知浏览器
@@ -615,6 +616,29 @@ WeixinJSBridge.invoke 的实现（宿主）     ← invoke / → callback       
 显示地址用同源的 `/__wxa__/mock/` 而不是原地址：Service Worker 没拦下时（DevTools 勾选了 Bypass for network）只会打到开发服务器，不会把本该拦截的请求发到真实后端。
 Service Worker 用 Static Routing API 让其余请求直接走网络，不经过它。自动化测试（`navigator.webdriver`）里不注册：测试不看面板，
 而且经过 Service Worker 的请求 Playwright 的 `page.route` 拦不到。
+
+---
+
+## 开发工具扩展点
+
+检查器（[wxa-inspector](https://github.com/open-wxa/wxa-inspector)）这类开发工具通过 `DevServer` 的三个选项接入，runner 不认识具体的工具：
+
+| 选项 | 作用 |
+| --- | --- |
+| `webviewScripts` | 注入每个渲染层页面（含插件页面、跳转后新建的页面）的脚本。`position: 'head'` 在桥（`frame.js`）之后、基础库之前执行，用于要赶在基础库之前注册事件监听的脚本；`'body'`（默认）在 `<body>` 开头、页面渲染之前执行——放在 body 末尾不会执行，基础库渲染时会换掉 body |
+| `middlewares` | 挂在 HTTP 服务上的路由，排在 runner 自己的路由之前，`req.url` 去掉了前缀，不处理时 `next()` 交回 runner。不能挂在 `/`，也不能占用 `/__wxa__`、`/__baselib__`、`/__plugin__` |
+| `wxmlTransform` | wxml 交给 wcc 之前的转换。wcc 只接收路径、自己读文件，所以转换结果写进临时镜像目录（`project/WxmlMirror.ts`），只重新转换内容变了的文件，项目里删掉的文件同时删掉；转换不能改变行数，编译错误才能指向源文件 |
+
+命令行的 `--inspect` 从用户项目（项目目录、当前目录，最后是 runner 自身）加载 `@open-wxa/wxa-inspector`，把 `inspector()` 的返回值展开进这三个选项。
+
+**开发工具可以依赖的约定**：除了这三个选项，开发工具还依赖下面这些运行时行为。改动它们等于破坏开发工具，
+所以都有测试守着（`tests/e2e/devTools.test.ts` 在各个已验证的基础库上跑，`tests/integration/devServerExtensions.test.ts`）：
+
+- 渲染层页面是宿主页面里的同源 iframe，宿主页面可以再被嵌进开发工具自己的页面：按 `window.frames` 逐层广播的消息能到达每个渲染层，渲染层能 `postMessage` 给 `top`
+- 鼠标操作在渲染层按 `touchstart` / `touchmove` / `touchend` 派发（`frame.ts`），浏览器原生的 `click` 照常派发；`head` 脚本在捕获阶段拦下 touch 后不触发 tap
+- 渲染层元素的 `__wxElement.dataset` 读得到 wxml 里写的 `data-*`；自定义组件的内容渲染在宿主元素里，宿主的 `__wxElement.is` 是组件路径。这是基础库的行为，runner 不能保证，测试用来在升级内置基础库时尽早发现变化
+- `/__wxa__/ws` 广播的消息：重新编译成功时 `{ type: 'hot', … }` 或 `{ type: 'reload' }`，失败时 `{ type: 'error', message }`
+- 编译失败时 `/__wxa__/app-info.json` 带 `buildError`
 
 ---
 
