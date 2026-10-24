@@ -20,6 +20,7 @@ import { compileWxml, compileWxss, ComponentTags } from '@open-wxa/wxa-runner-co
 import { transformSync } from 'esbuild';
 import { AppJson, MiniProgram } from './MiniProgram';
 import { createWxConfig } from './wxConfig';
+import { WxmlMirror } from './WxmlMirror';
 
 export interface BuildResult {
   version: number;
@@ -56,6 +57,11 @@ const ESM_SYNTAX = /(?:^|[;}])\s*(?:import\s*[{*'"]|import\s+[\w$]|export\s*[{*]
 
 type ChangeKind = 'config' | 'wxml' | 'wxss' | 'js';
 
+export interface AppBuilderOptions {
+  /** wxml 交给 wcc 前的转换，见 DevServerOptions.wxmlTransform */
+  wxmlTransform?: (code: string, file: string) => string;
+}
+
 export class AppBuilder {
   private version = 0;
   /** invalidate 标记过的变化次数；每次构建记下开始时覆盖到第几次 */
@@ -66,7 +72,22 @@ export class AppBuilder {
   private wxmlCache: { full: string; cut: string } | null = null;
   private wxssCache: { comm: string; pages: Record<string, string> } | null = null;
 
-  constructor(readonly project: MiniProgram) {}
+  /** 设置了 wxmlTransform 时才有 */
+  private readonly wxmlMirror: WxmlMirror | null;
+
+  constructor(readonly project: MiniProgram, options: AppBuilderOptions = {}) {
+    this.wxmlMirror = options.wxmlTransform ? new WxmlMirror(options.wxmlTransform) : null;
+  }
+
+  /** wxmlTransform 的镜像目录；没有设置转换或还没编译过时为 null */
+  get wxmlMirrorDir(): string | null {
+    return this.wxmlMirror?.directory ?? null;
+  }
+
+  /** 删除 wxmlTransform 的镜像目录，开发服务器关闭时调用 */
+  dispose(): void {
+    this.wxmlMirror?.dispose();
+  }
 
   /** 根据变化的文件标记需要重新构建的部分；返回 true 表示需要刷新 */
   invalidate(changedFiles: string[] = []): boolean {
@@ -201,7 +222,7 @@ export class AppBuilder {
         return { path: id, tags: Object.keys({ ...json.usingComponents, ...json.componentGenerics }) };
       });
 
-    const cwd = this.project.root;
+    const cwd = this.wxmlMirror ? this.wxmlMirror.sync(this.project, files.map(file => file.slice(2))) : this.project.root;
     const [full, cut] = await Promise.all([
       compileWxml({ cwd, files, components, cut: false }),
       compileWxml({ cwd, files, components, cut: true })

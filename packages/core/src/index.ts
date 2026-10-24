@@ -5,9 +5,9 @@
  */
 
 export { DevServer, DEFAULT_DEVICE } from './server/DevServer';
-export type { DevServerOptions } from './server/DevServer';
+export type { DevServerMiddleware, DevServerOptions, WebviewScript } from './server/DevServer';
 export { AppBuilder } from './project/AppBuilder';
-export type { BuildResult } from './project/AppBuilder';
+export type { AppBuilderOptions, BuildResult } from './project/AppBuilder';
 export { MiniProgram } from './project/MiniProgram';
 export type { AppJson, UnitJson } from './project/MiniProgram';
 export { createWxConfig } from './project/wxConfig';

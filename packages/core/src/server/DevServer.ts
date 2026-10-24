@@ -19,13 +19,14 @@
  *   /__wxa__/region/<kind>     地区选择器用的行政区划数据（districts / streets），取自本机开发者工具
  *   /__wxa__/api/*             --devtools-login：wx.login 的 code、手机号，服务市场、插件的请求转发，只允许本机访问
  *   /__wxa__/ws                文件变化通知：热更新（hot）或整页刷新（reload）；开启 forwardConsole 时浏览器从这里发来报错
+ *   options.middlewares        调用方挂载的路径，排在 runner 自己的路由之前
  *   其余路径                    小程序目录下的静态资源
  */
 
 import { randomUUID } from 'crypto';
 import { FileStore } from './FileStore';
 import fs from 'fs';
-import http from 'http';
+import http, { IncomingMessage, ServerResponse } from 'http';
 import net from 'net';
 import os from 'os';
 import path from 'path';
@@ -47,6 +48,25 @@ import { devtoolsLoginRouter } from './devtoolsLogin';
 import { requireUsableTicket, WechatDevClient } from './wechatDev';
 import { bundleSetup, collectSetupEnv, findSetupFile } from './setup';
 import { ProjectWatcher, watchProject } from './watcher';
+
+/** 注入每个渲染层页面的脚本，src 与 content 二选一 */
+export type WebviewScript = ({ src: string; content?: never } | { content: string; src?: never }) & {
+  /**
+   * 'head'：在基础库（WAWebview.js）之前执行，用于要赶在基础库之前注册事件监听的脚本，执行时 DOM 还没有就绪；
+   * 'body'（默认）：在 <body> 末尾、页面开始渲染之后执行
+   */
+  position?: 'head' | 'body';
+};
+
+/** 挂在开发服务器上的中间件：按前缀匹配，handler 收到的 req.url 已去掉 path 这段前缀 */
+export interface DevServerMiddleware {
+  /** 以 / 开头的路径前缀；不能是 /，也不能落在 runner 保留的前缀下（见 RESERVED_PREFIXES） */
+  path: string;
+  handler: (req: IncomingMessage, res: ServerResponse, next: (error?: unknown) => void) => void;
+}
+
+/** runner 自己使用的路径前缀，中间件不能占用 */
+const RESERVED_PREFIXES = ['/__wxa__', '/__baselib__', '/__plugin__'];
 
 export interface DevServerOptions {
   projectPath: string;
@@ -78,6 +98,15 @@ export interface DevServerOptions {
    * 默认不转发；命令行默认 'errors'，检测到编程助手时 'all'
    */
   forwardConsole?: ForwardConsole;
+  /** 注入每个渲染层页面（含插件页面、跳转后新建的页面）的脚本，供检查器等开发工具使用 */
+  webviewScripts?: WebviewScript[];
+  /** 挂在开发服务器上的中间件，供开发工具提供自己的页面和接口 */
+  middlewares?: DevServerMiddleware[];
+  /**
+   * wxml 交给 wcc 编译前的转换，file 是相对小程序根目录的路径（如 pages/index/index.wxml）。
+   * 不能改变行数，编译错误和热更新才能对应到源文件；相同输入要返回相同输出。源文件不会被修改
+   */
+  wxmlTransform?: (code: string, file: string) => string;
   logger?: Pick<Console, 'log' | 'warn' | 'error'>;
 }
 
@@ -116,6 +145,7 @@ export class DevServer {
 
   constructor(private readonly options: DevServerOptions) {
     this.logger = options.logger || console;
+    options.middlewares?.forEach(({ path: mountPath }) => assertMountPath(mountPath));
     this.project = new MiniProgram(path.resolve(options.projectPath));
     this.baseLib = resolveBaseLib({ version: options.baseLibVersion, cacheDir: options.baseLibCacheDir });
     if (!this.baseLib.compatible) {
@@ -128,7 +158,7 @@ export class DevServer {
     this.ticketSource = this.devtoolsLogin ? developerTicketSource(this.project.projectPath, this.logger) : null;
     this.plugins = new PluginStore(this.ticketSource && new WechatDevClient(this.project.appid, this.ticketSource), this.logger);
     this.device = { ...DEFAULT_DEVICE, ...options.device };
-    this.builder = new AppBuilder(this.project);
+    this.builder = new AppBuilder(this.project, { wxmlTransform: options.wxmlTransform });
     this.setupFile = resolveSetupFile(options.setup, this.project.projectPath);
     this.setupEnv = collectSetupEnv(process.env);
     this.app = this.createApp();
@@ -200,12 +230,17 @@ export class DevServer {
       await new Promise<void>(resolve => server.close(() => resolve()));
     }
     this.fileSessions.clear();
+    this.builder.dispose();
   }
 
   private createApp(): Express {
     const app = express();
     const root = this.project.root;
     const noStore = (res: Response) => res.setHeader('Cache-Control', 'no-store');
+
+    for (const { path: mountPath, handler } of this.options.middlewares ?? []) {
+      app.use(mountPath, (req, res, next) => handler(req, res, next));
+    }
 
     app.get('/', (_req, res) => {
       noStore(res);
@@ -270,9 +305,10 @@ export class DevServer {
       const pagePath = decodeURIComponent(req.params[0]);
       if (!build.pages.includes(pagePath)) return next();
       const pluginPage = findPluginPage(build, pagePath);
+      const scripts = this.options.webviewScripts ?? [];
       res.type('html').send(pluginPage
-        ? pluginWebviewHtml(build, pluginPage.plugin, pluginPage.innerPath, pagePath, Number(req.query.id))
-        : webviewHtml(build, pagePath, Number(req.query.id), { hot: this.hotEnabled }));
+        ? pluginWebviewHtml(build, pluginPage.plugin, pluginPage.innerPath, pagePath, Number(req.query.id), { scripts })
+        : webviewHtml(build, pagePath, Number(req.query.id), { hot: this.hotEnabled, scripts }));
     }));
 
     // 插件的逻辑层、渲染层代码
@@ -588,6 +624,14 @@ async function takenOnLoopback(port: number): Promise<boolean> {
     await new Promise(resolve => probe.close(resolve));
   }
   return false;
+}
+
+/** 中间件路径不能盖住宿主页面，也不能落在 runner 保留的前缀下 */
+function assertMountPath(mountPath: string): void {
+  const reserved = RESERVED_PREFIXES.find(prefix => mountPath === prefix || mountPath.startsWith(prefix + '/'));
+  if (!mountPath.startsWith('/') || mountPath === '/' || reserved) {
+    throw new Error(`中间件路径 ${mountPath} 不可用：要以 / 开头，不能是 /，也不能用 wxa-runner 保留的前缀 ${RESERVED_PREFIXES.join('、')}`);
+  }
 }
 
 function resolveSetupFile(option: string | false | undefined, projectPath: string): string | null {
