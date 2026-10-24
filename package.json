@@ -1,6 +1,6 @@
 {
   "name": "@open-wxa/wxa-runner",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Run WeChat Mini Programs in the browser on the official base library, for debugging and E2E testing",
   "private": true,
   "workspaces": [

@@ -1,5 +1,13 @@
 # 更新日志
 
+## [0.8.1](https://github.com/open-wxa/wxa-runner/compare/v0.8.0...v0.8.1) (2026-10-24)
+
+
+### 问题修复
+
+* 实现 wx.hideTabBar / showTabBar 和 tabBar 徽标、红点、样式、文字的修改 ([#76](https://github.com/open-wxa/wxa-runner/issues/76)) ([be01f8e](https://github.com/open-wxa/wxa-runner/commit/be01f8eda0c37ba16c8374dd7dbe9b9e44e8743f)), closes [#75](https://github.com/open-wxa/wxa-runner/issues/75)
+* 组件引用在编译时解析成组件路径，按包名引用的 npm 组件和省略 /index 的目录组件能渲染 ([#74](https://github.com/open-wxa/wxa-runner/issues/74)) ([e781937](https://github.com/open-wxa/wxa-runner/commit/e7819374bcd9ffe6d3b4e1af2f1319ccdc3efd8e)), closes [#73](https://github.com/open-wxa/wxa-runner/issues/73)
+
 ## [0.8.0](https://github.com/open-wxa/wxa-runner/compare/v0.7.0...v0.8.0) (2026-10-23)
 
 
