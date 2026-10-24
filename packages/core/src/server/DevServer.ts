@@ -52,8 +52,9 @@ import { ProjectWatcher, watchProject } from './watcher';
 /** 注入每个渲染层页面的脚本，src 与 content 二选一 */
 export type WebviewScript = ({ src: string; content?: never } | { content: string; src?: never }) & {
   /**
-   * 'head'：在基础库（WAWebview.js）之前执行，用于要赶在基础库之前注册事件监听的脚本，执行时 DOM 还没有就绪；
-   * 'body'（默认）：在 <body> 末尾、页面开始渲染之后执行
+   * 'head'：在基础库（WAWebview.js）之前执行，用于要赶在基础库之前注册事件监听的脚本，执行时还没有 document.body；
+   * 'body'（默认）：在 <body> 开头、页面开始渲染之前执行。不能放在 <body> 末尾：基础库渲染时会换掉 body，
+   *   之后才解析到的脚本落在脱离文档的旧 body 里，不会执行
    */
   position?: 'head' | 'body';
 };

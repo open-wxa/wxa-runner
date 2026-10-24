@@ -116,7 +116,7 @@ ${enableHotUpdate(options.hot)}<script src="/__wxa__/page-frame.js?v=${build.ver
 ${pageWindow(build, pagePath).disableScroll ? '<style>body{overflow-y:hidden}</style>' : ''}
 </head>
 <body>
-<script>
+${scriptTags(options.scripts, 'body')}<script>
 (function () {
   var path = ${toJs(pagePath)};
   if (typeof __wxAppCode__[path + '.wxss'] === 'function') __wxAppCode__[path + '.wxss']();
@@ -130,7 +130,7 @@ ${pageWindow(build, pagePath).disableScroll ? '<style>body{overflow-y:hidden}</s
   parent.__wxaHost.frameLoaded('webview', ${id});
 })();
 </script>
-${scriptTags(options.scripts, 'body')}</body>
+</body>
 </html>`;
 }
 
@@ -180,9 +180,9 @@ ${webviewHead(build, pagePath, id, options.scripts)}
 ${pageWindow(build, pagePath).disableScroll ? '<style>body{overflow-y:hidden}</style>' : ''}
 </head>
 <body>
-${page}
+${scriptTags(options.scripts, 'body')}${page}
 <script>parent.__wxaHost.frameLoaded('webview', ${id});</script>
-${scriptTags(options.scripts, 'body')}</body>
+</body>
 </html>`;
 }
 
@@ -190,7 +190,7 @@ function pageWindow(build: AppBuild, pagePath: string): Record<string, any> {
   return { ...build.wxConfig.global?.window, ...build.wxConfig.page?.[pagePath + '.html']?.window };
 }
 
-/** 渲染层公共的 head：页面配置、桥和基础库；position 为 head 的注入脚本在桥之后、基础库之前 */
+/** 渲染层公共的 head：页面配置、桥和基础库；position 为 head 的注入脚本在桥之后、基础库之前（body 的见 WebviewScript） */
 function webviewHead(build: AppBuild, pagePath: string, id: number, scripts?: WebviewScript[]): string {
   const wxConfig = { ...build.wxConfig, window: pageWindow(build, pagePath) };
   return `<meta charset="utf-8">

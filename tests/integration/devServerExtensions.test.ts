@@ -5,6 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { WebSocket } from 'ws';
 import { AppBuilder } from '../../packages/core/src/project/AppBuilder';
 import { MiniProgram } from '../../packages/core/src/project/MiniProgram';
 import { DevServer, DevServerOptions } from '../../packages/core/src/server/DevServer';
@@ -48,11 +49,11 @@ describe.skipIf(!ready)('webviewScripts', () => {
     expect(early).toBeLessThan(html.indexOf('/__baselib__/WAWebview.js'));
   });
 
-  it('默认放在 body 末尾、页面开始渲染之后；内联内容里的 </script> 不会提前结束标签', async () => {
+  it('默认放在 body 开头、页面开始渲染之前；内联内容里的 </script> 不会提前结束标签', async () => {
     const html = await pageHtml();
     const late = html.indexOf('<script>window.__late = "<\\/script>";</script>');
-    expect(late).toBeGreaterThan(html.indexOf("parent.__wxaHost.frameLoaded('webview', 1)"));
-    expect(late).toBeLessThan(html.indexOf('</body>'));
+    expect(late).toBeGreaterThan(html.indexOf('<body>'));
+    expect(late).toBeLessThan(html.indexOf("$gwx('./' + path + '.wxml')"));
   });
 
   it('插件页面同样注入', () => {
@@ -62,7 +63,8 @@ describe.skipIf(!ready)('webviewScripts', () => {
       scripts: [{ src: '/__tool__/early.js', position: 'head' }, { src: '/__tool__/late.js' }]
     });
     expect(html.indexOf('/__tool__/early.js')).toBeLessThan(html.indexOf('/__baselib__/WAWebview.js'));
-    expect(html.indexOf('/__tool__/late.js')).toBeGreaterThan(html.indexOf("frameLoaded('webview', 2)"));
+    expect(html.indexOf('/__tool__/late.js')).toBeGreaterThan(html.indexOf('<body>'));
+    expect(html.indexOf('/__tool__/late.js')).toBeLessThan(html.indexOf('<div></div>'));
   });
 });
 
@@ -174,5 +176,57 @@ describe.skipIf(!hasToolchain())('wxmlTransform', () => {
       vi.unstubAllEnvs();
     }
     expect(fs.existsSync(mirror)).toBe(false);
+  });
+});
+
+/** 开发工具（如 wxa-inspector 的页面）靠这两项显示编译错误，见 PROJECT_DESIGN.md 的「开发工具扩展点」 */
+describe.skipIf(!ready)('开发工具依赖的编译状态', () => {
+  const project = (wxml: string) => createProject({
+    'app.json': { pages: ['pages/index/index'] },
+    'pages/index/index.json': {},
+    'pages/index/index.wxml': wxml,
+    'pages/index/index.js': 'Page({})'
+  });
+  const BROKEN = '<view>\n<text>{{ a </text>\n</view>\n';
+
+  it('编译失败时 /__wxa__/app-info.json 带 buildError，说明出错的文件', async () => {
+    vi.stubEnv('WXA_BASELIB', '');
+    const server = createServer({ projectPath: project(BROKEN) });
+    const base = await server.start();
+    try {
+      const info = await (await fetch(`${base}/__wxa__/app-info.json`)).json();
+      expect(info.buildError).toMatch(/pages\/index\/index\.wxml/);
+    } finally {
+      await server.close();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('/__wxa__/ws：重新编译失败时广播 { type: error, message }，修好后广播 hot 或 reload', async () => {
+    vi.stubEnv('WXA_BASELIB', '');
+    const root = project('<view>ok</view>\n');
+    const server = createServer({ projectPath: root, watch: true });
+    const base = await server.start();
+    const socket = new WebSocket(`${base.replace('http', 'ws')}/__wxa__/ws`);
+    const messages: Array<{ type: string; message?: string }> = [];
+    socket.on('message', data => messages.push(JSON.parse(String(data))));
+    // 开发服务器不暴露文件监听何时就绪，就绪前的改动会被忽略：每次写入的内容略有不同，没收到就再写一次
+    const writeUntil = (file: string, content: string, type: (t: string) => boolean) => vi.waitFor(() => {
+      const found = messages.find(m => type(m.type));
+      if (found) return found;
+      fs.writeFileSync(file, `${content}<!-- ${Date.now()} -->\n`);
+      throw new Error(`还没收到，已收到：${JSON.stringify(messages)}`);
+    }, { timeout: 15000, interval: 1000 });
+    try {
+      await new Promise(resolve => socket.once('open', resolve));
+      const file = path.join(root, 'pages/index/index.wxml');
+      expect((await writeUntil(file, BROKEN, t => t === 'error')).message).toMatch(/pages\/index\/index\.wxml/);
+      messages.length = 0;
+      await writeUntil(file, '<view>fixed</view>\n', t => t === 'hot' || t === 'reload');
+    } finally {
+      socket.close();
+      await server.close();
+      vi.unstubAllEnvs();
+    }
   });
 });
