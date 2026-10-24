@@ -32,15 +32,19 @@ program
   .option('--forward-console', '浏览器里的 console.warn / console.error 也转发到终端（检测到编程助手时默认开启）')
   .option('--no-forward-console', '浏览器里的报错不转发到终端')
   .option('--devtools-login', '借本机微信开发者工具的登录态访问微信后台：真实的 code 和手机号、服务市场、插件')
+  .option('--extension <module>', '加载开发服务器扩展（npm 包名或文件路径），可以写多次', (value, previous) => [...previous, value], [])
   // 旧名，开发服务器会提示改用 --devtools-login
   .addOption(new Option('--real-login').hideHelp())
   .action(async (projectPath, options) => {
     const { DevServer } = require('@open-wxa/wxa-runner-core');
+    const resolvedProjectPath = path.resolve(process.cwd(), projectPath);
 
     try {
+      const extensions = options.extension.map(name => loadExtension(name, resolvedProjectPath));
       const forward = await resolveForwardConsole(options.forwardConsole);
       const server = new DevServer({
-        projectPath: path.resolve(process.cwd(), projectPath),
+        projectPath: resolvedProjectPath,
+        extensions,
         port: options.port === undefined ? undefined : parseInt(options.port, 10),
         host: options.host === true ? '0.0.0.0' : options.host,
         baseLibVersion: options.baselib,
@@ -55,6 +59,7 @@ program
       console.log('');
       console.log(chalk.green('  wxa-runner 已启动'));
       console.log(`  地址      ${chalk.cyan(url)}`);
+      server.extensionEntries.forEach(entry => console.log(`  ${bannerLabel(entry.label)}${chalk.cyan(url + entry.path)}`));
       const networkUrls = server.networkUrls;
       if (networkUrls.length === 0) {
         console.log(`  局域网    ${chalk.gray('加 --host 开放局域网访问')}`);
@@ -66,7 +71,8 @@ program
       if (server.setupFile) console.log(`  setup     ${server.setupFile}`);
       console.log('');
 
-      if (options.open) openBrowser(url);
+      // 有扩展页面时打开第一个：扩展页面通常把小程序嵌在里面
+      if (options.open) openBrowser(url + (server.extensionEntries[0]?.path ?? ''));
 
       const shutdown = () => server.close().then(() => process.exit(0));
       process.on('SIGINT', shutdown);
@@ -115,6 +121,41 @@ baselib
  * 没指定 --forward-console / --no-forward-console 时：编程助手自己启动开发服务器时只看得到终端，
  * console.warn / console.error 也转发；人在自己的终端里启动时用浏览器的开发者工具看，只转发报错
  */
+/**
+ * 加载 --extension 指定的扩展。扩展装在用户项目里，从 wxa-runner 自己的安装位置不一定找得到（如 pnpm 不提升依赖时），
+ * 所以依次从项目目录、当前目录、wxa-runner 自身查找。模块的默认导出可以是扩展对象，也可以是不带参数调用后返回扩展的函数
+ */
+function loadExtension(name, projectPath) {
+  const { createRequire } = require('module');
+  const request = name.startsWith('.') ? path.resolve(name) : name;
+  let resolved = null;
+  for (const base of [path.join(projectPath, 'package.json'), path.join(process.cwd(), 'package.json'), __filename]) {
+    try {
+      resolved = createRequire(base).resolve(request);
+      break;
+    } catch {
+      // 换下一个位置找
+    }
+  }
+  if (!resolved) {
+    console.error(chalk.red(`\n找不到扩展 ${name}：`), chalk.cyan(`npm i -D ${name}`));
+    process.exit(1);
+  }
+  const exported = require(resolved);
+  const candidate = exported?.default ?? exported;
+  const extension = typeof candidate === 'function' ? candidate() : candidate;
+  if (!extension || typeof extension.name !== 'string' || typeof extension.setup !== 'function') {
+    throw new Error(`${name} 不是 wxa-runner 的扩展：默认导出要有 name 和 setup()，或是返回这样的对象的函数`);
+  }
+  return extension;
+}
+
+/** 启动信息左列的标签补到 10 列宽，与「地址      」对齐；中文字符占两列 */
+function bannerLabel(label) {
+  const width = [...label].reduce((sum, ch) => sum + (ch.charCodeAt(0) > 0xff ? 2 : 1), 0);
+  return label + ' '.repeat(Math.max(10 - width, 2));
+}
+
 async function resolveForwardConsole(option) {
   if (option === false) return { mode: false };
   if (option === true) return { mode: 'all' };

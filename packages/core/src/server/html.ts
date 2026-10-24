@@ -3,6 +3,7 @@
  */
 
 import { BuildResult, toJs } from '../project/AppBuilder';
+import type { WebviewScript } from './DevServer';
 import { AppBuild, PluginCode, pluginScriptUrl } from './plugins';
 
 export function hostHtml(): string {
@@ -105,17 +106,17 @@ ${empty ? '' : '<script src="/__baselib__/WASubContext.js"></script>\n'}<script>
 </html>`;
 }
 
-export function webviewHtml(build: AppBuild, pagePath: string, webviewId: number, options: { hot: boolean }): string {
+export function webviewHtml(build: AppBuild, pagePath: string, webviewId: number, options: { hot: boolean; scripts?: WebviewScript[] }): string {
   const id = Number(webviewId) || 0;
   return `<!DOCTYPE html>
 <html>
 <head>
-${webviewHead(build, pagePath, id)}
+${webviewHead(build, pagePath, id, options.scripts)}
 ${enableHotUpdate(options.hot)}<script src="/__wxa__/page-frame.js?v=${build.version}"></script>
 ${pageWindow(build, pagePath).disableScroll ? '<style>body{overflow-y:hidden}</style>' : ''}
 </head>
 <body>
-<script>
+${scriptTags(options.scripts, 'body')}<script>
 (function () {
   var path = ${toJs(pagePath)};
   if (typeof __wxAppCode__[path + '.wxss'] === 'function') __wxAppCode__[path + '.wxss']();
@@ -161,18 +162,25 @@ importScripts(${modules.map(url => toJs(url)).join(', ')});
  * 插件页面：只加载插件自己的模板和样式（pageframe.js），不加载小程序的，与开发者工具一致。
  * 页面 html 是插件包里编译好的片段，自己注入样式、取模板并派发 generateFuncReady
  */
-export function pluginWebviewHtml(build: AppBuild, plugin: PluginCode, innerPath: string, pagePath: string, webviewId: number): string {
+export function pluginWebviewHtml(
+  build: AppBuild,
+  plugin: PluginCode,
+  innerPath: string,
+  pagePath: string,
+  webviewId: number,
+  options: { scripts?: WebviewScript[] } = {}
+): string {
   const id = Number(webviewId) || 0;
   const page = plugin.files.get(`/${innerPath}.html`)?.toString('utf8') ?? `<script>console.error(${JSON.stringify(`[wxa-runner] 插件 ${plugin.alias} 里没有页面 ${innerPath}`)})</script>`;
   return `<!DOCTYPE html>
 <html>
 <head>
-${webviewHead(build, pagePath, id)}
+${webviewHead(build, pagePath, id, options.scripts)}
 <script src="${pluginScriptUrl(plugin, 'pageframe.js')}"></script>
 ${pageWindow(build, pagePath).disableScroll ? '<style>body{overflow-y:hidden}</style>' : ''}
 </head>
 <body>
-${page}
+${scriptTags(options.scripts, 'body')}${page}
 <script>parent.__wxaHost.frameLoaded('webview', ${id});</script>
 </body>
 </html>`;
@@ -182,8 +190,8 @@ function pageWindow(build: AppBuild, pagePath: string): Record<string, any> {
   return { ...build.wxConfig.global?.window, ...build.wxConfig.page?.[pagePath + '.html']?.window };
 }
 
-/** 渲染层公共的 head：页面配置、桥和基础库 */
-function webviewHead(build: AppBuild, pagePath: string, id: number): string {
+/** 渲染层公共的 head：页面配置、桥和基础库；position 为 head 的注入脚本在桥之后、基础库之前（body 的见 WebviewScript） */
+function webviewHead(build: AppBuild, pagePath: string, id: number, scripts?: WebviewScript[]): string {
   const wxConfig = { ...build.wxConfig, window: pageWindow(build, pagePath) };
   return `<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
@@ -198,7 +206,17 @@ function webviewHead(build: AppBuild, pagePath: string, id: number): string {
 <style>.wxa-service-canvas{position:absolute!important;left:0!important;top:0!important;width:100%!important;height:100%!important;visibility:inherit!important;pointer-events:none}</style>
 <script>var __wxConfig = ${toJs(wxConfig)};</script>
 <script src="/__wxa__/runtime/frame.js" data-kind="webview" data-webview-id="${id}"></script>
-<script src="/__baselib__/WAWebview.js"></script>`;
+${scriptTags(scripts, 'head')}<script src="/__baselib__/WAWebview.js"></script>`;
+}
+
+/** 注入脚本的 <script> 标签，每个一行；内联内容里的 </script 转义，不会提前结束标签 */
+function scriptTags(scripts: WebviewScript[] | undefined, position: 'head' | 'body'): string {
+  return (scripts ?? [])
+    .filter(script => (script.position ?? 'body') === position)
+    .map(script => script.src !== undefined
+      ? `<script src="${escapeHtml(script.src)}"></script>\n`
+      : `<script>${script.content.replace(/<\/script/gi, '<\\/script')}</script>\n`)
+    .join('');
 }
 
 function escapeHtml(text: string): string {

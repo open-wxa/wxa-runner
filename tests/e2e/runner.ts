@@ -53,6 +53,8 @@ export interface RunnerOptions {
   forwardConsole?: DevServerOptions['forwardConsole'];
   /** 开发服务器的终端输出，默认丢弃 */
   logger?: DevServerOptions['logger'];
+  /** 开发工具用的扩展点 */
+  extensions?: Pick<DevServerOptions, 'webviewScripts' | 'middlewares' | 'wxmlTransform'>;
 }
 
 export interface Runner {
@@ -78,7 +80,8 @@ export async function startRunner(project: Record<string, string | object> | str
     devtoolsLogin: options.devtoolsLogin,
     forwardConsole: options.forwardConsole,
     runtimeDir: RUNTIME_DIR,
-    logger: options.logger ?? { log: () => undefined, warn: () => undefined, error: () => undefined }
+    logger: options.logger ?? { log: () => undefined, warn: () => undefined, error: () => undefined },
+    ...options.extensions
   });
   const base = await server.start();
   const browser = await chromium.launch({ ...chromeLaunchOptions, args: options.chromeArgs });
