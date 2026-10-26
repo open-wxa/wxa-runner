@@ -68,7 +68,6 @@ uni-app 的配置和写法见 [uni-app 项目的 E2E 测试](./uni-app.md)。
 GitLab CI、Jenkins 等也可以，机器要满足：
 
 - Linux x86-64，Node.js ≥ 18
-- 安装依赖时有 git、能访问 github.com：内置基础库从 GitHub 安装
 - 装有 Google Chrome。没有时运行 `npx playwright install --with-deps chrome`
 
 ## 限制
@@ -84,8 +83,7 @@ GitLab CI、Jenkins 等也可以，机器要满足：
 
 ## 排查
 
-**启动时提示找不到基础库**：内置基础库安装失败时不会报错，常见原因是安装依赖时访问不了 github.com，或者没有 git。
-确认这两点后重新安装依赖。
+**启动时提示找不到基础库**：内置基础库是可选依赖，安装失败时不会报错。重新安装依赖，确认 `node_modules` 里有 `@open-wxa/wxa-baselib`。
 
 **本地通过，CI 上失败**：本地装了开发者工具时，用的是它下载过的基础库和它自带的编译器，和 CI 不同。
 本地先用和 CI 一样的基础库版本跑一遍：

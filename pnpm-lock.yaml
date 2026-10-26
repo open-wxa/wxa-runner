@@ -145,8 +145,8 @@ importers:
         version: 5.9.3
     optionalDependencies:
       '@open-wxa/wxa-baselib':
-        specifier: github:open-wxa/wxa-baselib#25495a9ea11724fee7e276e2db9b2c9e8cba9175
-        version: https://codeload.github.com/open-wxa/wxa-baselib/tar.gz/25495a9ea11724fee7e276e2db9b2c9e8cba9175
+        specifier: ^0.1.0
+        version: 0.1.0
 
   packages/playwright:
     dependencies:
@@ -862,9 +862,8 @@ packages:
     os: [linux]
     libc: [glibc]
 
-  '@open-wxa/wxa-baselib@https://codeload.github.com/open-wxa/wxa-baselib/tar.gz/25495a9ea11724fee7e276e2db9b2c9e8cba9175':
-    resolution: {tarball: https://codeload.github.com/open-wxa/wxa-baselib/tar.gz/25495a9ea11724fee7e276e2db9b2c9e8cba9175}
-    version: 0.1.0
+  '@open-wxa/wxa-baselib@0.1.0':
+    resolution: {integrity: sha512-mt2Nsd3mt7mXh3GhpSQzTHvzi6l++Xhwdd7CH9PJJv3yTh4QXC8y9+E2QkL5URO76RToLahACRwCmrgmMYQsaA==}
 
   '@oxfmt/binding-android-arm-eabi@0.74.0':
     resolution: {integrity: sha512-xxQwrf5EPI5zxvuCTW8r6tzCTjPQ+h6+HqJ0iRKRy2zS1yBllt/xLVjoIyUc+FnR7g0a5g1SZv2yyDYhTItLbA==}
@@ -3513,7 +3512,7 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
-  '@open-wxa/wxa-baselib@https://codeload.github.com/open-wxa/wxa-baselib/tar.gz/25495a9ea11724fee7e276e2db9b2c9e8cba9175':
+  '@open-wxa/wxa-baselib@0.1.0':
     optional: true
 
   '@oxfmt/binding-android-arm-eabi@0.74.0':

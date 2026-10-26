@@ -22,7 +22,7 @@
     "build": "tsup"
   },
   "optionalDependencies": {
-    "@open-wxa/wxa-baselib": "github:open-wxa/wxa-baselib#25495a9ea11724fee7e276e2db9b2c9e8cba9175"
+    "@open-wxa/wxa-baselib": "^0.1.0"
   },
   "devDependencies": {
     "tsup": "^8.0.1",

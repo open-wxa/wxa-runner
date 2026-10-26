@@ -73,8 +73,7 @@ HBuilderX 创建的项目，编译产物在 `unpackage/dist/dev/mp-weixin`。改
 
 本机有微信开发者工具就用它的，没有就用随依赖安装的内置版本，不用另外准备。
 
-- 内置基础库从 GitHub 安装（[wxa-baselib](https://github.com/open-wxa/wxa-baselib)），需要本机有 git、能访问 github.com。
-  访问不了时安装不会报错，只是没有内置基础库，在没有开发者工具的机器上启动时会提示找不到基础库
+- 内置基础库（[wxa-baselib](https://github.com/open-wxa/wxa-baselib)）是可选依赖，安装失败时不会报错，只是在没有开发者工具的机器上启动时会提示找不到基础库
 - 默认使用基础库 3.7.0 及以下的版本。3.7.1 起的版本要用 `--baselib` 或 `WXA_BASELIB` 指定，见[命令与环境变量](./cli.md#wxa-runner-baselib)
 
 ## 下一步

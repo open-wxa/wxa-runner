@@ -41,8 +41,6 @@ npx wxa-runner dev . --open
 For regular use or CI, add it as a dev dependency: `pnpm add -D wxa-runner` (or `npm i -D wxa-runner`).
 
 The CLI currently prints in Chinese. No separate setup for the base library or the compiler: wxa-runner uses WeChat DevTools' copies when installed, and bundled ones installed as dependencies otherwise.
-The bundled base library ([wxa-baselib](https://github.com/open-wxa/wxa-baselib)) installs from GitHub and needs git and access to github.com.
-If GitHub is unreachable, installation still succeeds without it, and on a machine without DevTools wxa-runner then reports that no base library was found.
 See [docs/cli.md](./docs/cli.md) (in Chinese) for command options and environment variables.
 
 ## Usage
