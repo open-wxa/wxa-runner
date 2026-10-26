@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.8.2](https://github.com/open-wxa/wxa-runner/compare/v0.8.1...v0.8.2) (2026-10-26)
+
+
+### 其他
+
+* 内置基础库改为从 npm 安装 ([#80](https://github.com/open-wxa/wxa-runner/issues/80)) ([57af9dd](https://github.com/open-wxa/wxa-runner/commit/57af9ddd342baea0f3aa354d299b76c14a4c6c96))
+
 ## [0.8.1](https://github.com/open-wxa/wxa-runner/compare/v0.8.0...v0.8.1) (2026-10-24)
 
 

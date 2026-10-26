@@ -1,6 +1,6 @@
 {
   "name": "@open-wxa/wxa-runner-compiler",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Wrapper around the official WXML/WXSS compilers (wcc/wcsc) shipped with WeChat DevTools",
   "license": "MIT",
   "author": "open-wxa",

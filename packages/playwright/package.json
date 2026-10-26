@@ -1,6 +1,6 @@
 {
   "name": "@open-wxa/wxa-runner-playwright",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "Playwright fixture for wxa-runner: starts the dev server per worker, reads page data and asserts mini-program requests",
   "keywords": [
     "wechat",
