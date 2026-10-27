@@ -314,11 +314,11 @@ describe.skipIf(!ready)('DevServer：端口被占用', () => {
   const quiet = { log: () => undefined, warn: () => undefined, error: () => undefined };
   const servers: Array<{ close(): unknown }> = [];
 
-  /** 占住本机的端口，port 为 0 时随机选一个；已被别的进程占用时也算占住 */
-  const occupy = (port: number) => new Promise<number>(resolve => {
+  /** 占住端口，port 为 0 时随机选一个；已被别的进程占用时也算占住 */
+  const occupy = (port: number, host = 'localhost') => new Promise<number>(resolve => {
     const blocker = net.createServer();
     blocker.once('error', () => resolve(port));
-    blocker.listen(port, 'localhost', () => {
+    blocker.listen(port, host, () => {
       servers.push(blocker);
       resolve((blocker.address() as net.AddressInfo).port);
     });
@@ -357,6 +357,11 @@ describe.skipIf(!ready)('DevServer：端口被占用', () => {
 
     expect(Number(new URL(server.url).port)).toBeGreaterThan(3000);
     expect(await (await fetch(server.url)).text()).toContain('/__wxa__/runtime/host.js');
+  });
+
+  it('别的进程监听所有地址时，只监听本机地址也算端口被占用：macOS 上能绑定成功，但 127.0.0.1 会进到那边', async () => {
+    const port = await occupy(0, '::');
+    await expect(start({ port })).rejects.toThrow(`端口 ${port} 已被占用`);
   });
 
   it('指定的端口被占用时启动失败，提示关闭占用的进程或换一个端口', async () => {

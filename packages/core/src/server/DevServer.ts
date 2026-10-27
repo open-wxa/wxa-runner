@@ -556,8 +556,8 @@ const LOCAL_HOST_OF_ANY_ADDRESS = new Map([['0.0.0.0', '127.0.0.1'], ['::', 'loc
 /** 开始监听，返回实际的端口。没指定端口时从 3000 起往后找空闲的，换了端口在终端提示 */
 async function listen(server: http.Server, port: number | undefined, host: string, logger: Pick<Console, 'warn'>): Promise<number> {
   for (let candidate = port ?? DEFAULT_PORT; ; candidate++) {
-    // 系统允许别的进程单独占着本机地址上的同一端口，这时打开本机地址会进到那边
-    const taken = (LOCAL_HOST_OF_ANY_ADDRESS.has(host) && (await takenOnLoopback(candidate))) || !(await bind(server, candidate, host));
+    // macOS 允许本机地址和所有地址上各有一个进程占着同一端口，两个方向都能绑定成功，打开 localhost 会进到哪边说不准
+    const taken = (await takenOnLocalAddresses(candidate)) || !(await bind(server, candidate, host));
     if (!taken) {
       const actual = (server.address() as net.AddressInfo).port;
       if (port === undefined && actual !== DEFAULT_PORT) logger.warn(`[wxa-runner] 端口 ${DEFAULT_PORT} 已被占用，改用 ${actual}`);
@@ -579,8 +579,8 @@ function bind(server: net.Server, port: number, host: string): Promise<boolean> 
   });
 }
 
-async function takenOnLoopback(port: number): Promise<boolean> {
-  for (const address of ['127.0.0.1', '::1']) {
+async function takenOnLocalAddresses(port: number): Promise<boolean> {
+  for (const address of ['127.0.0.1', '::1', '0.0.0.0', '::']) {
     const probe = net.createServer();
     // 没有这个地址（如关掉了 IPv6）时不算占用
     const free = await bind(probe, port, address).catch(() => true);
