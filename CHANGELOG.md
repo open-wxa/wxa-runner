@@ -1,5 +1,17 @@
 # 更新日志
 
+## [0.9.0](https://github.com/open-wxa/wxa-runner/compare/v0.8.2...v0.9.0) (2026-10-27)
+
+
+### 新功能
+
+* 开发服务器扩展（extensions / --extension），开放 webviewScripts、middlewares、wxmlTransform 扩展点 ([#78](https://github.com/open-wxa/wxa-runner/issues/78)) ([5045160](https://github.com/open-wxa/wxa-runner/commit/5045160ab857037899f49da97515a28a91fa6d92))
+
+
+### 问题修复
+
+* 别的进程监听所有地址时，监听 localhost 也换用空闲端口 ([#82](https://github.com/open-wxa/wxa-runner/issues/82)) ([1c001a2](https://github.com/open-wxa/wxa-runner/commit/1c001a234c317c9ad5302c11afe51c1197ba7209))
+
 ## [0.8.2](https://github.com/open-wxa/wxa-runner/compare/v0.8.1...v0.8.2) (2026-10-26)
 
 
