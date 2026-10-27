@@ -40,7 +40,8 @@ program
     const resolvedProjectPath = path.resolve(process.cwd(), projectPath);
 
     try {
-      const extensions = options.extension.map(name => loadExtension(name, resolvedProjectPath));
+      const extensions = [];
+      for (const name of options.extension) extensions.push(await loadExtension(name, resolvedProjectPath));
       const forward = await resolveForwardConsole(options.forwardConsole);
       const server = new DevServer({
         projectPath: resolvedProjectPath,
@@ -118,30 +119,32 @@ baselib
   });
 
 /**
- * 没指定 --forward-console / --no-forward-console 时：编程助手自己启动开发服务器时只看得到终端，
- * console.warn / console.error 也转发；人在自己的终端里启动时用浏览器的开发者工具看，只转发报错
- */
-/**
  * 加载 --extension 指定的扩展。扩展装在用户项目里，从 wxa-runner 自己的安装位置不一定找得到（如 pnpm 不提升依赖时），
- * 所以依次从项目目录、当前目录、wxa-runner 自身查找。模块的默认导出可以是扩展对象，也可以是不带参数调用后返回扩展的函数
+ * 所以依次从项目目录、当前目录、wxa-runner 自身查找。CommonJS 和 ES 模块都可以，
+ * 默认导出可以是扩展对象，也可以是不带参数调用后返回扩展的函数
  */
-function loadExtension(name, projectPath) {
+async function loadExtension(name, projectPath) {
   const { createRequire } = require('module');
+  const { pathToFileURL } = require('url');
   const request = name.startsWith('.') ? path.resolve(name) : name;
   let resolved = null;
   for (const base of [path.join(projectPath, 'package.json'), path.join(process.cwd(), 'package.json'), __filename]) {
     try {
       resolved = createRequire(base).resolve(request);
       break;
-    } catch {
-      // 换下一个位置找
+    } catch (error) {
+      if (error.code === 'MODULE_NOT_FOUND') continue;
+      // 装了但解析不出入口，如 exports 只给了 import 条件：按 require 的规则解析，找不到可用的入口
+      throw new Error(`扩展 ${name} 加载失败：${error.message.split('\n')[0]}。package.json 的 exports 要提供 require 或 default 条件`);
     }
   }
   if (!resolved) {
     console.error(chalk.red(`\n找不到扩展 ${name}：`), chalk.cyan(`npm i -D ${name}`));
     process.exit(1);
   }
-  const exported = require(resolved);
+  // 用 import() 而不是 require()：Node.js 22.12 之前 require() 不能加载 ES 模块，之后也不能加载带顶层 await 的。
+  // import() 拿到的 default 对 CommonJS 是 module.exports，所以 exports.default 还要再取一层
+  const exported = (await import(pathToFileURL(resolved).href)).default;
   const candidate = exported?.default ?? exported;
   const extension = typeof candidate === 'function' ? candidate() : candidate;
   if (!extension || typeof extension.name !== 'string' || typeof extension.setup !== 'function') {
@@ -156,6 +159,10 @@ function bannerLabel(label) {
   return label + ' '.repeat(Math.max(10 - width, 2));
 }
 
+/**
+ * 没指定 --forward-console / --no-forward-console 时：编程助手自己启动开发服务器时只看得到终端，
+ * console.warn / console.error 也转发；人在自己的终端里启动时用浏览器的开发者工具看，只转发报错
+ */
 async function resolveForwardConsole(option) {
   if (option === false) return { mode: false };
   if (option === true) return { mode: 'all' };

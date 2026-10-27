@@ -627,7 +627,7 @@ Service Worker 用 Static Routing API 让其余请求直接走网络，不经过
 | 选项 | 作用 |
 | --- | --- |
 | `webviewScripts` | 注入每个渲染层页面（含插件页面、跳转后新建的页面）的脚本。`position: 'head'` 在桥（`frame.js`）之后、基础库之前执行，用于要赶在基础库之前注册事件监听的脚本；`'body'`（默认）在 `<body>` 开头、页面渲染之前执行——放在 body 末尾不会执行，基础库渲染时会换掉 body |
-| `middlewares` | 挂在 HTTP 服务上的路由，排在 runner 自己的路由之前，`req.url` 去掉了前缀，不处理时 `next()` 交回 runner。不能挂在 `/`，也不能占用 `/__wxa__`、`/__baselib__`、`/__plugin__` |
+| `middlewares` | 挂在 HTTP 服务上的路由，排在 runner 自己的路由之前，`req.url` 去掉了前缀，不处理时 `next()` 交回 runner。只收字面量路径（Express 会把 `*`、`:参数` 当模式匹配），不能挂在 `/`，也不能占用 `/__wxa__`、`/__baselib__`、`/__plugin__`（不区分大小写，Express 匹配路径不区分大小写） |
 | `wxmlTransform` | wxml 交给 wcc 之前的转换。wcc 只接收路径、自己读文件，所以转换结果写进临时镜像目录（`project/WxmlMirror.ts`），只重新转换内容变了的文件，项目里删掉的文件同时删掉；转换不能改变行数，编译错误才能指向源文件 |
 
 **扩展**（`server/extensions.ts`）：开发工具把要用的扩展点打包成一个扩展 `{ name, setup(context) }`。`setup` 收到项目目录和小程序根目录，
@@ -635,7 +635,8 @@ Service Worker 用 Static Routing API 让其余请求直接走网络，不经过
 按顺序合并在直接给出的选项之后：脚本和中间件依次拼接，wxml 转换依次串起来。「插件」在 runner 里指小程序插件，所以这里叫扩展。
 
 命令行的 `--extension <模块>` 从用户项目（项目目录、当前目录，最后是 runner 自身）加载扩展——它是用户项目的开发依赖，
-pnpm 不提升依赖时从 runner 的安装位置找不到。模块的默认导出可以是扩展，也可以是不带参数调用后返回扩展的函数。
+pnpm 不提升依赖时从 runner 的安装位置找不到。按 `require` 的规则解析入口，用 `import()` 加载，所以 CommonJS 和 ES 模块都可以，
+但 `exports` 要提供 `require` 或 `default` 条件。模块的默认导出可以是扩展，也可以是不带参数调用后返回扩展的函数。
 扩展的 `entry` 打印在启动信息里，`--open` 打开第一个。
 
 **开发工具可以依赖的约定**：除了这三个选项，开发工具还依赖下面这些运行时行为。改动它们等于破坏开发工具，

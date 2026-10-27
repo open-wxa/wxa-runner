@@ -62,7 +62,7 @@ export type WebviewScript = ({ src: string; content?: never } | { content: strin
 
 /** 挂在开发服务器上的中间件：按前缀匹配，handler 收到的 req.url 已去掉 path 这段前缀 */
 export interface DevServerMiddleware {
-  /** 以 / 开头的路径前缀；不能是 /，也不能落在 runner 保留的前缀下（见 RESERVED_PREFIXES） */
+  /** 以 / 开头的字面量路径前缀，如 /__tool__；不能是 /，不能含通配符和参数，也不能落在 runner 保留的前缀下（见 RESERVED_PREFIXES） */
   path: string;
   handler: (req: IncomingMessage, res: ServerResponse, next: (error?: unknown) => void) => void;
 }
@@ -640,11 +640,19 @@ async function takenOnLoopback(port: number): Promise<boolean> {
   return false;
 }
 
-/** 中间件路径不能盖住宿主页面，也不能落在 runner 保留的前缀下 */
+/**
+ * 中间件路径不能盖住宿主页面，也不能落在 runner 保留的前缀下。
+ * Express 把路径当模式匹配（支持 * 和 :参数）且不区分大小写，所以只收字面量路径，按小写比较保留前缀
+ */
 function assertMountPath(mountPath: string): void {
-  const reserved = RESERVED_PREFIXES.find(prefix => mountPath === prefix || mountPath.startsWith(prefix + '/'));
-  if (!mountPath.startsWith('/') || mountPath === '/' || reserved) {
-    throw new Error(`中间件路径 ${mountPath} 不可用：要以 / 开头，不能是 /，也不能用 wxa-runner 保留的前缀 ${RESERVED_PREFIXES.join('、')}`);
+  const literal = typeof mountPath === 'string' && /^(\/[\w.~-]+)+$/.test(mountPath);
+  const lower = literal ? mountPath.toLowerCase() : '';
+  const reserved = RESERVED_PREFIXES.some(prefix => lower === prefix || lower.startsWith(prefix + '/'));
+  if (!literal || reserved) {
+    throw new Error(
+      `中间件路径 ${String(mountPath)} 不可用：要以 / 开头，只含字母、数字和 _ . ~ -（不支持通配符和参数），不能是 /，` +
+      `也不能用 wxa-runner 保留的前缀 ${RESERVED_PREFIXES.join('、')}（不区分大小写）`
+    );
   }
 }
 

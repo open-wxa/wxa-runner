@@ -93,7 +93,8 @@ describe.skipIf(!ready)('middlewares', () => {
     }
   });
 
-  it.each(['/', 'tool', '/__wxa__', '/__wxa__/tool', '/__baselib__', '/__plugin__/x'])('不能挂在 %s', mountPath => {
+  // Express 匹配路径不区分大小写，还支持通配符和参数：'/__WXA__' 会截走 /__wxa__ 下的请求，'/*'、'/:tool?' 连首页也会截走
+  it.each(['/', 'tool', '/__wxa__', '/__wxa__/tool', '/__WXA__', '/__Baselib__/x', '/__plugin__/x', '/*', '/:tool?', '/tool/*', '/tool(.*)'])('不能挂在 %s', mountPath => {
     expect(() => createServer({ middlewares: [{ path: mountPath, handler: () => undefined }] })).toThrow(/中间件路径/);
   });
 });

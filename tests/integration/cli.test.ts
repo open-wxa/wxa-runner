@@ -4,7 +4,7 @@
  * 是否把浏览器里的 console.warn / console.error 转发到终端：编程助手自己启动开发服务器时，只看得到终端输出，
  * 所以检测到编程助手时默认转发；人在自己的终端里启动时用浏览器的开发者工具看，默认只转发报错。
  *
- * --extension 从用户项目里加载开发服务器扩展。
+ * --extension 从用户项目里加载开发服务器扩展，CommonJS 和 ES 模块都可以。
  */
 
 import { ChildProcess, spawn } from 'child_process';
@@ -98,6 +98,26 @@ describe.skipIf(!ready)('wxa-runner dev --extension', () => {
     const banner = await startDev(['--extension', 'fake-ext', '--extension', './local-ext.js'], {}, projectWithExtension());
     expect(banner).toMatch(/假扩展\s+\S+\/__fake__\//);
     expect(banner).toMatch(/local\s+\S+\/__local__\//);
+  });
+
+  it('加载 ES 模块写的扩展，包括顶层 await 的', async () => {
+    const cwd = createProject({
+      'node_modules/esm-ext/package.json': { name: 'esm-ext', type: 'module', exports: './index.js' },
+      'node_modules/esm-ext/index.js': `
+        const label = await Promise.resolve('ESM 扩展');
+        export default { name: 'esm-ext', setup: () => ({ entry: { label, path: '/__esm__/' } }) };`
+    });
+    expect(await startDev(['--extension', 'esm-ext'], {}, cwd)).toMatch(/ESM 扩展\s+\S+\/__esm__\//);
+  });
+
+  it('装了但解析不出入口时报出原因，不提示安装', async () => {
+    const cwd = createProject({
+      'node_modules/import-only-ext/package.json': { name: 'import-only-ext', exports: { import: './index.mjs' } },
+      'node_modules/import-only-ext/index.mjs': 'export default {};'
+    });
+    const started = startDev(['--extension', 'import-only-ext'], {}, cwd);
+    await expect(started).rejects.toThrow(/扩展 import-only-ext 加载失败[\s\S]*require 或 default/);
+    await expect(started).rejects.not.toThrow(/npm i -D/);
   });
 
   it('找不到扩展时说明安装方法并退出', async () => {
