@@ -28,6 +28,7 @@ wxa-runner dev <项目目录> [选项]
 | `--setup <文件>` | 自动查找 | 小程序启动前执行的 [setup 文件](./setup.md)，路径相对当前目录。不指定时使用项目目录下的 `wxa.setup.ts` / `.js` / `.mjs` |
 | `--no-setup` | | 不执行 setup 文件 |
 | `--no-watch` | | 不监听文件变化、不热更新，运行环境与真机一致。跑测试时用 |
+| `--device <机型>` | `ios` | 模拟的机型：`ios`（iPhone X）、`android`、`harmony`（鸿蒙），影响屏幕尺寸、状态栏和 `wx.getDeviceInfo` 等返回的设备信息。鸿蒙机型里业务代码拿到的 `platform` 是 `android`：基础库按开发者工具运行时只区分 `ios` 和 `android` |
 | `-o, --open` | | 启动后打开浏览器 |
 | `--forward-console` | 检测到编程助手时开启 | `console.warn` / `console.error` 也转发到终端，见[报错转发到终端](#报错转发到终端) |
 | `--no-forward-console` | | 报错不转发到终端 |

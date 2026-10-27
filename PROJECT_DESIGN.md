@@ -360,7 +360,7 @@ navigateTo(url)
 | 模块 | 内容 |
 | --- | --- |
 | storage | localStorage，按 appid 和 storageId 隔离；原样保存基础库序列化后的数据和 dataType；渲染层用的 GlobalStorage（cookie） |
-| system | 以模拟设备（默认 iPhone X，375×812 @3x）为准的 getSystemInfo 及 windowInfo / deviceInfo / appBaseInfo 等 |
+| system | 以模拟设备为准的 getSystemInfo 及 windowInfo / deviceInfo / appBaseInfo 等。机型预设见 `server/devices.ts`：ios（默认，iPhone X）、android、harmony。基础库按开发者工具运行，会用 brand 改写业务代码拿到的 platform（iPhone 为 ios，其他为 android），所以鸿蒙预设的 platform 在业务代码里是 android |
 | network | `createRequestTask` 同步返回 taskId，结果通过 `onRequestTaskStateChange` 依次推送 `headersReceived`、`success` / `fail`；下载、上传、WebSocket 同理。`success` 的 data 按 `responseType` 是文本或 ArrayBuffer，被拦截的请求也一样；WebSocket 的二进制消息是 ArrayBuffer。基础库把业务传的 ArrayBuffer（请求体、WebSocket 消息）原样交给宿主，不经 `__nativeBuffers__`。每个 `wx.request` 都记录下来，供测试 API 的 `requests()` 读取 |
 | routes | 请求拦截规则：setup 的 `network.routes` 和测试 API 的 `route` 共用，在浏览器里匹配，命中的请求不发往代理 |
 | ui | toast / loading / modal / actionSheet / 导航栏 |

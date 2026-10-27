@@ -48,6 +48,8 @@ export interface RunnerOptions {
   baseLibVersion?: string;
   /** 基础库解包目录，默认 ~/.wxa-runner/baselib；模拟的基础库要放到临时目录，免得污染真实缓存 */
   baseLibCacheDir?: string;
+  /** 模拟的机型，默认 iPhone X */
+  device?: DevServerOptions['device'];
   /** 开启 --devtools-login；不想依赖本机登录态时用 page.route 拦截 /__wxa__/api/* */
   devtoolsLogin?: boolean;
   forwardConsole?: DevServerOptions['forwardConsole'];
@@ -77,6 +79,7 @@ export async function startRunner(project: Record<string, string | object> | str
     watch: false,
     baseLibVersion: options.baseLibVersion,
     baseLibCacheDir: options.baseLibCacheDir,
+    device: options.device,
     devtoolsLogin: options.devtoolsLogin,
     forwardConsole: options.forwardConsole,
     runtimeDir: RUNTIME_DIR,

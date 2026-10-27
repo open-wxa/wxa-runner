@@ -7,7 +7,7 @@ import { menuButtonRect, NAVIGATION_BAR_HEIGHT, TAB_BAR_HEIGHT } from '../api/sy
 import { element } from './dom';
 import { openImagePreview } from './ImagePreview';
 import { openPicker, PickerOptions, PickerSession } from './Picker';
-import { DEVICE_BEZEL, SHELL_CSS, STAGE_GAP, STAGE_PADDING } from './styles';
+import { DEVICE_BEZEL, PUNCH_HOLE_SIZE, SHELL_CSS, STAGE_GAP, STAGE_PADDING } from './styles';
 
 export interface NavigationState {
   title: string;
@@ -124,13 +124,13 @@ export class PhoneShell {
     style.textContent = SHELL_CSS;
     document.head.appendChild(style);
 
-    // 刘海屏的状态栏比传统机型（20px）高，以此区分是否绘制刘海
-    const hasNotch = profile.statusBarHeight > 20;
+    const { cutout } = profile;
+    const deviceClass = cutout === 'none' ? '' : ` is-full-screen has-${cutout}`;
     const capsule = menuButtonRect(profile);
     root.innerHTML = `
       <div class="wxa-stage">
         <div class="wxa-device-slot">
-          <div class="wxa-device${hasNotch ? ' has-notch' : ''}" style="width:${profile.screenWidth}px;height:${profile.screenHeight}px;--wxa-safe-bottom:${profile.safeAreaBottom}px">
+          <div class="wxa-device${deviceClass}" style="width:${profile.screenWidth}px;height:${profile.screenHeight}px;--wxa-safe-bottom:${profile.safeAreaBottom}px">
             <div class="wxa-statusbar" style="height:${profile.statusBarHeight}px">
               <span class="wxa-statusbar-time">9:41</span>
               <span class="wxa-statusbar-icons">${STATUS_ICONS}</span>
@@ -145,7 +145,8 @@ export class PhoneShell {
               <span class="wxa-capsule-more">${MORE_ICON}</span><span class="wxa-capsule-close">${CLOSE_ICON}</span>
             </div>
             <div class="wxa-overlay"></div>
-            ${hasNotch ? '<div class="wxa-notch"></div>' : ''}
+            ${cutout === 'notch' ? '<div class="wxa-notch"></div>' : ''}
+            ${cutout === 'punch-hole' ? `<div class="wxa-punch-hole" style="top:${(profile.statusBarHeight - PUNCH_HOLE_SIZE) / 2}px"></div>` : ''}
             ${profile.safeAreaBottom ? '<div class="wxa-home-indicator"></div>' : ''}
           </div>
         </div>
