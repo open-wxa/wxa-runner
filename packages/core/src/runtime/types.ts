@@ -38,14 +38,22 @@ export interface HostApi {
 }
 
 export interface DeviceProfile {
+  /**
+   * 基础库按开发者工具运行，用它改写业务代码拿到的 platform：iPhone 为 ios，其他品牌为 android，
+   * devtools 保持 devtools
+   */
+  brand: string;
   model: string;
   screenWidth: number;
   screenHeight: number;
   pixelRatio: number;
   statusBarHeight: number;
-  /** 底部安全区高度（Home Indicator），无刘海机型为 0 */
+  /** 底部安全区高度，有 Home Indicator 的机型（全面屏 iPhone）才有，外壳在这里画 Home Indicator */
   safeAreaBottom: number;
+  /** 屏幕顶部的开口：刘海（全面屏 iPhone）、挖孔摄像头（安卓、鸿蒙全面屏）或没有（传统机型）。有开口的屏幕是圆角的 */
+  cutout: 'notch' | 'punch-hole' | 'none';
   system: string;
+  /** 模拟的客户端平台（ios / android / ohos），决定 getDeviceInfo 返回哪些字段；业务代码拿到的 platform 见 brand */
   platform: string;
 }
 

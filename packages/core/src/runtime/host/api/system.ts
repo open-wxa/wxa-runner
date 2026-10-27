@@ -53,16 +53,17 @@ export function createSystemApis(options: SystemApiOptions): Record<string, ApiH
     };
   };
 
+  // abi、deviceAbi、cpuType、benchmarkLevel 官方文档注明仅 Android 支持
+  const androidOnly = device.platform === 'android'
+    ? { abi: 'arm64-v8a', deviceAbi: 'arm64-v8a', cpuType: 'unknown', benchmarkLevel: 1 }
+    : {};
   const deviceInfo = () => ({
-    brand: 'devtools',
+    brand: device.brand,
     model: device.model,
     system: device.system,
     platform: device.platform,
-    benchmarkLevel: 1,
-    abi: 'arm64',
-    deviceAbi: 'arm64',
-    cpuType: 'unknown',
-    memorySize: 4096
+    memorySize: '4096',
+    ...androidOnly
   });
 
   const appBaseInfo = () => ({

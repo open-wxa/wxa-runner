@@ -49,6 +49,7 @@ import { requireUsableTicket, WechatDevClient } from './wechatDev';
 import { bundleSetup, collectSetupEnv, findSetupFile } from './setup';
 import { ProjectWatcher, watchProject } from './watcher';
 import { applyExtensions, DevServerExtension, ExtensionEntry } from './extensions';
+import { DEVICE_PRESETS, DeviceName, resolveDevice } from './devices';
 
 /** 注入每个渲染层页面的脚本，src 与 content 二选一 */
 export type WebviewScript = ({ src: string; content?: never } | { content: string; src?: never }) & {
@@ -80,7 +81,12 @@ export interface DevServerOptions {
   baseLibVersion?: string;
   baseLibCacheDir?: string;
   watch?: boolean;
-  device?: Partial<DeviceProfile>;
+  /**
+   * 模拟的机型：预设名（ios、android、harmony，见 DEVICE_PRESETS），或在默认的 iPhone X 上覆盖的字段。
+   * 在其他预设上改字段时展开预设：{ ...DEVICE_PRESETS.android, screenWidth: 393 }。
+   * 只改 platform 不会改变业务代码拿到的 platform：基础库按 brand 判断，见 DeviceProfile.brand
+   */
+  device?: DeviceName | Partial<DeviceProfile>;
   /**
    * 小程序启动前执行的 setup 文件；默认使用项目目录下的 wxa.setup.ts / .js / .mjs，传 false 不使用
    * 环境变量在构造时读取，只暴露 WXA_ 前缀的变量
@@ -114,16 +120,7 @@ export interface DevServerOptions {
   logger?: Pick<Console, 'log' | 'warn' | 'error'>;
 }
 
-export const DEFAULT_DEVICE: DeviceProfile = {
-  model: 'iPhone X',
-  screenWidth: 375,
-  screenHeight: 812,
-  pixelRatio: 3,
-  statusBarHeight: 44,
-  safeAreaBottom: 34,
-  system: 'iOS 16.0',
-  platform: 'devtools'
-};
+export const DEFAULT_DEVICE: DeviceProfile = DEVICE_PRESETS.ios;
 
 export class DevServer {
   readonly project: MiniProgram;
@@ -134,7 +131,8 @@ export class DevServer {
   /** 扩展提供的页面，按扩展的顺序 */
   readonly extensionEntries: ExtensionEntry[];
   private readonly setupEnv: Record<string, string>;
-  private readonly device: DeviceProfile;
+  /** 模拟的机型 */
+  readonly device: DeviceProfile;
   private readonly logger: Pick<Console, 'log' | 'warn' | 'error'>;
   private readonly app: Express;
   private server: http.Server | null = null;
@@ -171,7 +169,7 @@ export class DevServer {
     this.devtoolsLogin = (options.devtoolsLogin ?? options.realLogin) === true;
     this.ticketSource = this.devtoolsLogin ? developerTicketSource(this.project.projectPath, this.logger) : null;
     this.plugins = new PluginStore(this.ticketSource && new WechatDevClient(this.project.appid, this.ticketSource), this.logger);
-    this.device = { ...DEFAULT_DEVICE, ...options.device };
+    this.device = resolveDevice(options.device);
     this.builder = new AppBuilder(this.project, { wxmlTransform: extended.wxmlTransform });
     this.setupFile = resolveSetupFile(options.setup, this.project.projectPath);
     this.setupEnv = collectSetupEnv(process.env);

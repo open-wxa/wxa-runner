@@ -5,6 +5,8 @@
  */
 
 export { DevServer, DEFAULT_DEVICE } from './server/DevServer';
+export { DEVICE_NAMES, DEVICE_PRESETS } from './server/devices';
+export type { DeviceName } from './server/devices';
 export type { DevServerMiddleware, DevServerOptions, WebviewScript } from './server/DevServer';
 export type { DevServerExtension, ExtensionContext, ExtensionEntry, ExtensionSetup } from './server/extensions';
 export { AppBuilder } from './project/AppBuilder';

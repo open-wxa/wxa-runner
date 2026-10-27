@@ -28,6 +28,7 @@ program
   .option('--setup <file>', '小程序启动前执行的 setup 文件（默认使用项目目录下的 wxa.setup.ts / .js / .mjs）')
   .option('--no-setup', '不执行 setup 文件')
   .option('--no-watch', '不监听文件变化')
+  .addOption(new Option('--device <name>', '模拟的机型（默认 ios，即 iPhone X）').choices(['ios', 'android', 'harmony']))
   .option('-o, --open', '启动后打开浏览器')
   .option('--forward-console', '浏览器里的 console.warn / console.error 也转发到终端（检测到编程助手时默认开启）')
   .option('--no-forward-console', '浏览器里的报错不转发到终端')
@@ -51,6 +52,7 @@ program
         baseLibVersion: options.baselib,
         setup: options.setup,
         watch: options.watch,
+        device: options.device,
         devtoolsLogin: options.devtoolsLogin,
         realLogin: options.realLogin,
         forwardConsole: forward.mode
@@ -66,6 +68,7 @@ program
         console.log(`  局域网    ${chalk.gray('加 --host 开放局域网访问')}`);
       }
       networkUrls.forEach((networkUrl, i) => console.log(`  ${i === 0 ? '局域网' : '      '}    ${chalk.cyan(networkUrl)}`));
+      console.log(`  机型      ${server.device.model}（${server.device.system}）${options.device ? '' : chalk.gray('，--device android / harmony 切换')}`);
       console.log(`  控制台    ${describeForwardConsole(forward)}`);
       console.log(`  项目      ${server.project.root}`);
       console.log(`  基础库    ${server.baseLib.version}${server.baseLib.source === 'bundled' ? '（内置）' : ''}`);

@@ -72,6 +72,24 @@ describe.skipIf(!ready)('wxa-runner dev：转发浏览器的控制台输出', ()
   });
 });
 
+describe.skipIf(!ready)('wxa-runner dev --device', () => {
+  const deviceLine = (banner: string) => banner.split('\n').find(line => line.trim().startsWith('机型'));
+
+  it('默认模拟 iPhone X，启动信息提示可选的机型', async () => {
+    const line = deviceLine(await startDev([]));
+    expect(line).toContain('iPhone X');
+    expect(line).toContain('--device');
+  });
+
+  it('按预设名切换机型', async () => {
+    expect(deviceLine(await startDev(['--device', 'harmony']))).toMatch(/HarmonyOS/);
+  });
+
+  it('不认识的机型列出可选的并退出', async () => {
+    await expect(startDev(['--device', 'pixel'])).rejects.toThrow(/ios, android, harmony/);
+  });
+});
+
 describe.skipIf(!ready)('wxa-runner dev --extension', () => {
   /** 一个装在项目 node_modules 里的扩展：默认导出返回扩展的函数，页面上回显 setup 收到的小程序根目录 */
   const projectWithExtension = () => createProject({

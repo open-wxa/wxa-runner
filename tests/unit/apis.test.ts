@@ -13,8 +13,8 @@ import { createUiApis } from '../../packages/core/src/runtime/host/api/ui';
 import type { PhoneShell } from '../../packages/core/src/runtime/host/ui/PhoneShell';
 
 const device = {
-  model: 'iPhone 6/7/8', screenWidth: 375, screenHeight: 667, pixelRatio: 2,
-  statusBarHeight: 20, safeAreaBottom: 0, system: 'iOS 16.0', platform: 'devtools'
+  brand: 'iPhone', model: 'iPhone 6/7/8', screenWidth: 375, screenHeight: 667, pixelRatio: 2,
+  statusBarHeight: 20, safeAreaBottom: 0, system: 'iOS 16.0', platform: 'ios', cutout: 'none' as const
 };
 
 const call = (apis: Record<string, ApiHandler>, api: string, args: object = {}) =>
@@ -26,7 +26,7 @@ describe('系统信息', () => {
   it('getSystemInfo 合并设备、窗口和基础库信息', () => {
     expect(call(apis, 'getSystemInfoSync')).toMatchObject({
       model: 'iPhone 6/7/8', screenWidth: 375, windowWidth: 375, windowHeight: 553,
-      statusBarHeight: 20, SDKVersion: '3.7.0', platform: 'devtools', errMsg: 'getSystemInfoSync:ok'
+      statusBarHeight: 20, SDKVersion: '3.7.0', platform: 'ios', errMsg: 'getSystemInfoSync:ok'
     });
   });
 
@@ -46,6 +46,19 @@ describe('系统信息', () => {
       safeArea: { top: 44, left: 0, right: 375, bottom: 778, width: 375, height: 734 },
       safeAreaInsets: { top: 44, left: 0, right: 0, bottom: 34 }
     });
+  });
+
+  it('getDeviceInfo 返回模拟设备的品牌、型号和系统；abi、cpuType 等只有 Android 返回，和真机一致', () => {
+    expect(call(apis, 'getDeviceInfo')).toMatchObject({ brand: 'iPhone', model: 'iPhone 6/7/8', system: 'iOS 16.0', platform: 'ios', memorySize: '4096' });
+    expect(call(apis, 'getDeviceInfo')).not.toHaveProperty('abi');
+
+    const android = createSystemApis({ device: { ...device, brand: 'Xiaomi', platform: 'android' }, baseLibVersion: '3.7.0', windowHeight: () => 553, screenTop: () => 64 });
+    expect(call(android, 'getDeviceInfo')).toMatchObject({ brand: 'Xiaomi', abi: 'arm64-v8a', deviceAbi: 'arm64-v8a', benchmarkLevel: 1 });
+    expect(call(android, 'getDeviceInfo')).toHaveProperty('cpuType');
+
+    const harmony = createSystemApis({ device: { ...device, brand: 'HUAWEI', platform: 'ohos' }, baseLibVersion: '3.7.0', windowHeight: () => 553, screenTop: () => 64 });
+    expect(call(harmony, 'getDeviceInfo')).toMatchObject({ brand: 'HUAWEI', platform: 'ohos' });
+    expect(call(harmony, 'getDeviceInfo')).not.toHaveProperty('abi');
   });
 
   it('胶囊按钮位置按状态栏高度计算', () => {

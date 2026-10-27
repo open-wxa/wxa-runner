@@ -2,6 +2,8 @@
 export const DEVICE_BEZEL = 13;
 export const STAGE_PADDING = 24;
 export const STAGE_GAP = 16;
+/** 安卓、鸿蒙全面屏状态栏中间的挖孔摄像头直径 */
+export const PUNCH_HOLE_SIZE = 10;
 /** 选择器每一行的高度，一列显示 5 行，选中项在中间（与开发者工具的 WeUI picker 相同） */
 export const PICKER_ITEM_HEIGHT = 48;
 
@@ -10,11 +12,14 @@ html, body { margin: 0; height: 100%; background: radial-gradient(120% 80% at 50
 .wxa-stage { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: ${STAGE_GAP}px; padding: ${STAGE_PADDING}px; box-sizing: border-box; }
 .wxa-device-slot { position: relative; flex: none; }
 .wxa-device { position: absolute; transform-origin: 0 0; overflow: hidden; background: #fff; border-radius: 6px; display: flex; flex-direction: column; box-shadow: 0 0 0 ${DEVICE_BEZEL - 2}px #111214, 0 0 0 ${DEVICE_BEZEL - 1}px #3a3b3f, 0 0 0 ${DEVICE_BEZEL}px #1b1c1f, 0 32px 64px -12px rgba(15,23,42,.35), 0 14px 28px -8px rgba(15,23,42,.18); }
-.wxa-device.has-notch { border-radius: 40px; }
+/* 安卓、鸿蒙没有底部安全区，圆角直接压在 tabBar 和吸底按钮上，取小一些 */
+.wxa-device.is-full-screen { border-radius: 40px; }
+.wxa-device.has-punch-hole { border-radius: 24px; }
 .wxa-notch { position: absolute; top: 0; left: 50%; z-index: 30; width: 209px; height: 30px; transform: translateX(-50%); background: #000; border-radius: 0 0 20px 20px; pointer-events: none; }
 .wxa-notch::before, .wxa-notch::after { content: ''; position: absolute; top: 0; width: 6px; height: 6px; }
 .wxa-notch::before { left: -6px; background: radial-gradient(circle at 0 100%, transparent 5.5px, #000 6px); }
 .wxa-notch::after { right: -6px; background: radial-gradient(circle at 100% 100%, transparent 5.5px, #000 6px); }
+.wxa-punch-hole { position: absolute; left: 50%; z-index: 30; width: ${PUNCH_HOLE_SIZE}px; height: ${PUNCH_HOLE_SIZE}px; transform: translateX(-50%); border-radius: 50%; background: #000; pointer-events: none; }
 .wxa-home-indicator { position: absolute; bottom: 8px; left: 50%; z-index: 30; width: 134px; height: 5px; transform: translateX(-50%); border-radius: 3px; background: rgba(0,0,0,.85); pointer-events: none; }
 .wxa-statusbar { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font-size: 12px; font-weight: 600; box-sizing: border-box; user-select: none; }
 .wxa-statusbar-icons { display: flex; align-items: center; gap: 5px; }
@@ -22,6 +27,7 @@ html, body { margin: 0; height: 100%; background: radial-gradient(120% 80% at 50
 .has-notch .wxa-statusbar { display: grid; grid-template-columns: 1fr 209px 1fr; align-items: start; padding: 15px 0 0; font-size: 15px; letter-spacing: -.2px; }
 .has-notch .wxa-statusbar-time { grid-column: 1; justify-self: center; line-height: 20px; }
 .has-notch .wxa-statusbar-icons { grid-column: 3; justify-self: center; height: 20px; }
+.has-punch-hole .wxa-statusbar { padding: 0 20px; font-size: 14px; }
 .wxa-navbar { flex: none; height: 44px; position: relative; display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
 .wxa-navbar.is-hidden, .wxa-statusbar.is-hidden { display: none; }
 .wxa-navbar-title { font-size: 17px; font-weight: 600; max-width: calc(100% - 204px); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
