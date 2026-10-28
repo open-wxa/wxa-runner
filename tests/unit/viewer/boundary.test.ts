@@ -55,9 +55,16 @@ describe('查看器与 core 的边界', () => {
   });
 
   it('源码里没有某个部署平台专用的代码：导出的是纯静态站点和标准 Fetch 处理函数，接到哪个平台由使用者决定', () => {
-    const files = [...sourceFiles(VIEWER_SRC), ...sourceFiles(CORE_SRC), path.join(REPO_ROOT, 'packages/viewer/bin/wxa-viewer.js')];
+    const files = [...sourceFiles(VIEWER_SRC), ...sourceFiles(CORE_SRC)];
     const violations = files.filter(file => /cloudflare|wrangler|vercel|netlify/i.test(fs.readFileSync(file, 'utf8'))).map(file => path.relative(REPO_ROOT, file));
     expect(violations).toEqual([]);
+  });
+
+  it('wxa-runner 命令行只在开发依赖里引用查看器：npm 用户装 wxa-runner 时不会装上它', () => {
+    const cli = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'packages/cli/package.json'), 'utf8'));
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+      expect(Object.keys(cli[field] ?? {}), field).not.toContain('@open-wxa/wxa-viewer');
+    }
   });
 
   it('core 不引用查看器', () => {

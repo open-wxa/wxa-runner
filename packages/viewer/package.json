@@ -10,9 +10,6 @@
     "url": "git+https://github.com/open-wxa/wxa-runner.git",
     "directory": "packages/viewer"
   },
-  "bin": {
-    "wxa-viewer": "./bin/wxa-viewer.js"
-  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -28,7 +25,6 @@
     }
   },
   "files": [
-    "bin",
     "dist"
   ],
   "scripts": {
@@ -38,8 +34,6 @@
   "dependencies": {
     "@open-wxa/wxa-runner-core": "workspace:*",
     "@open-wxa/wxa-runner-extractor": "workspace:*",
-    "chalk": "^4.1.2",
-    "commander": "^11.1.0",
     "esbuild-wasm": "0.28.2",
     "express": "^4.18.2",
     "fflate": "^0.8.3"

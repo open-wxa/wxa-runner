@@ -1,5 +1,5 @@
 /**
- * wxa-viewer preview：在本机提供查看器站点和 wx.request 转发
+ * wxa-runner viewer preview：在本机提供查看器站点和 wx.request 转发
  *
  * 小程序的页面和代码由浏览器里的 Service Worker 从导入的包里应答（runtime/packRoutes.ts），这里不编译、不读项目。
  */

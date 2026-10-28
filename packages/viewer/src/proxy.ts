@@ -1,5 +1,5 @@
 /**
- * 转发 wx.request 的请求处理函数（打包为 dist/proxy.mjs，wxa-viewer export 一并导出）
+ * 转发 wx.request 的请求处理函数（打包为 dist/proxy.mjs，wxa-runner viewer export 一并导出）
  *
  * 只用标准 Fetch API，接到任何能处理 Request → Response 的平台上都行：把 /__wxa__/proxy/ 开头的请求交给它，
  * 其余请求交给静态站点。只转发到白名单里的域名：不设限的话，任何人都能把部署出去的查看器当成代理用。

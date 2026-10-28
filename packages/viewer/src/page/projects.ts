@@ -32,7 +32,7 @@ export function importProject(
 }
 
 /**
- * 下载地址栏里 pack 参数指向的同源包，有多个时按顺序全部下载（wxa-viewer preview 传了多个包）。
+ * 下载地址栏里 pack 参数指向的同源包，有多个时按顺序全部下载（wxa-runner viewer preview 传了多个包）。
  * 只有调用方都保存成功后才用 cleanURL 替换地址，下载或校验失败时刷新还能重试
  * @returns 地址栏没有 pack 参数时为 null
  * @throws 有非同源地址（不发任何请求）、某个包下载失败时

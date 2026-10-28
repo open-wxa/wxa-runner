@@ -181,7 +181,7 @@ async function main() {
         h('p', {}, '把 .wxapack 拖到这里，或者选择文件'),
         h('button', { class: 'v-btn v-btn-primary', type: 'button', onClick: () => picker.click() }, icon('import'), '选择文件'),
         h('p', { class: 'v-empty-note' }, '包、setup 和变量只保存在这个浏览器里'),
-        h('pre', {}, '# 在本机把小程序打成包\nwxa-viewer build <小程序目录>')
+        h('pre', {}, '# 在本机把小程序打成包\nwxa-runner viewer pack <小程序目录>')
       )
     );
   }

@@ -1,5 +1,5 @@
 /**
- * 查看器的端到端流程：wxa-viewer build 打出的包在 preview 里由 Service Worker 渲染，
+ * 查看器的端到端流程：wxa-runner viewer pack 打出的包在 preview 里由 Service Worker 渲染，
  * 在查看页面里改环境变量和 setup 后生效，刷新后还在；wx.request 经本机代理到达真实服务器
  */
 

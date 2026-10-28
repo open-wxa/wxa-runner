@@ -1,5 +1,5 @@
 /**
- * wxa-viewer build：在本机把小程序编译成 .wxapack 包，格式见 format.ts
+ * wxa-runner viewer pack：在本机把小程序编译成 .wxapack 包，格式见 format.ts
  *
  * 编译要用官方 wcc / wcsc，只能在 Node 里做；包里放的是开发服务器本来按请求生成的东西，查看器拿到后不用再编译。
  */

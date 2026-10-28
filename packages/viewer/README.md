@@ -2,12 +2,14 @@
 
 不带源码、不开开发服务器，在浏览器里运行小程序：
 
-1. 在本机用 `wxa-viewer build` 把小程序编译成一个 `.wxapack` 包
-2. 把包拖进查看器页面，就在浏览器里运行。查看器是静态网页，可以用 `wxa-viewer preview` 在本机打开，也可以导出后放到任意静态托管
+1. 在本机用 `wxa-runner viewer pack` 把小程序编译成一个 `.wxapack` 包
+2. 把包拖进查看器页面，就在浏览器里运行。查看器是静态网页，可以用 `wxa-runner viewer preview` 在本机打开，也可以导出后放到任意静态托管
 
 渲染用的是 [wxa-runner](../../README.md) 的宿主运行时和微信官方基础库，表现和 `wxa-runner dev` 一致。
 
-> 这个包目前是 `private`，没有发布到 npm。在仓库里先 `pnpm install && pnpm build`，再用 `node packages/viewer/bin/wxa-viewer.js` 代替下文的 `npx wxa-viewer`。
+命令挂在 `wxa-runner viewer` 下面，实现在这个包里，执行时才加载：`wxa-runner` 不依赖它，只用 `dev` 的人不会多装 esbuild-wasm 等依赖；没装这个包时，命令会提示怎么装。
+
+> 这个包目前是 `private`，没有发布到 npm，查看器命令只能在仓库里用：先 `pnpm install && pnpm build`，再用 `node packages/cli/bin/wxa-runner.js` 代替下文的 `npx wxa-runner`。
 
 编译只在第一步做一次，查看器里不需要编译器，也不需要小程序源码。导入的包、setup 和环境变量（如 token）存在浏览器的 IndexedDB 里，刷新、关掉再打开都还在，不会上传到任何服务器。
 
@@ -15,11 +17,11 @@
 
 ```bash
 # 原生小程序：在 project.config.json 所在目录
-npx wxa-viewer build .
+npx wxa-runner viewer pack .
 
 # uni-app：先构建，再打包编译产物；setup 文件放在源码目录
 npm run build:mp-weixin
-npx wxa-viewer build ./dist/build/mp-weixin --setup ./wxa.setup.ts -o my-app.wxapack
+npx wxa-runner viewer pack ./dist/build/mp-weixin --setup ./wxa.setup.ts -o my-app.wxapack
 ```
 
 默认输出到当前目录的 `<appid>.wxapack`。项目目录下有 `wxa.setup.ts` 时会一起打进包里；setup 可以 `import` 其他文件，打包时一并打进去。
@@ -28,10 +30,10 @@ npx wxa-viewer build ./dist/build/mp-weixin --setup ./wxa.setup.ts -o my-app.wxa
 ## 在本机打开
 
 ```bash
-npx wxa-viewer preview my-app.wxapack --open
+npx wxa-runner viewer preview my-app.wxapack --open
 ```
 
-浏览器打开后自动导入这个包。之后也可以不带包启动（`npx wxa-viewer preview`），把 `.wxapack` 拖进页面导入。
+浏览器打开后自动导入这个包。之后也可以不带包启动（`npx wxa-runner viewer preview`），把 `.wxapack` 拖进页面导入。
 
 ## 在查看器里配置
 
@@ -51,7 +53,7 @@ export default defineSetup(({ env }) => ({
 ## 部署
 
 ```bash
-npx wxa-viewer export ./viewer-export
+npx wxa-runner viewer export ./viewer-export
 ```
 
 导出两样东西：
@@ -105,9 +107,9 @@ export default {
 
 | 命令 | 选项 |
 | --- | --- |
-| `wxa-viewer build <项目目录>` | `-o, --out <文件>` 输出文件（默认 `<appid>.wxapack`）；`-b, --baselib <版本>`；`--setup <文件>` / `--no-setup` |
-| `wxa-viewer preview [包…]` | `-p, --port <端口>`；`--host [地址]`；`-b, --baselib <版本>`；`-o, --open` |
-| `wxa-viewer export <输出目录>` | `-b, --baselib <版本>`；`--force` |
+| `wxa-runner viewer pack <项目目录>` | `-o, --out <文件>` 输出文件（默认 `<appid>.wxapack`）；`-b, --baselib <版本>`；`--setup <文件>` / `--no-setup` |
+| `wxa-runner viewer preview [包…]` | `-p, --port <端口>`；`--host [地址]`；`-b, --baselib <版本>`；`-o, --open` |
+| `wxa-runner viewer export <输出目录>` | `-b, --baselib <版本>`；`--force` |
 
 ## 和 wxa-runner 的关系
 

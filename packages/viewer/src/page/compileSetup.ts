@@ -7,7 +7,7 @@ import { SETUP_MODULE, SETUP_MODULE_SOURCE } from '@open-wxa/wxa-runner-core/web
 
 type SetupBuild = typeof esbuildBuild;
 let compiler: Promise<SetupBuild> | undefined;
-const SINGLE_FILE_ERROR = '查看器里的 setup 只能是单个文件；要 import 其他文件，用 wxa-viewer build --setup 打进包里';
+const SINGLE_FILE_ERROR = '查看器里的 setup 只能是单个文件；要 import 其他文件，用 wxa-runner viewer pack --setup 打进包里';
 
 function browserCompiler(): Promise<SetupBuild> {
   compiler ??= import('esbuild-wasm')

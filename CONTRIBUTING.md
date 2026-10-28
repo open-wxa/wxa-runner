@@ -11,7 +11,7 @@ packages/
   core/        @open-wxa/wxa-runner-core       项目构建、开发服务器、浏览器端运行时
   cli/         wxa-runner                      命令行（包名不带 scope，npx wxa-runner 直接可用）
   playwright/  @open-wxa/wxa-runner-playwright Playwright fixture
-  viewer/      @open-wxa/wxa-viewer            把小程序打成 .wxapack 在浏览器里运行（private，不发布；只用 core 的公开导出）
+  viewer/      @open-wxa/wxa-viewer            把小程序打成 .wxapack 在浏览器里运行，命令是 wxa-runner viewer（private，不发布；只用 core 的公开导出）
 examples/      showcase（覆盖主要功能，「能力」页逐项对照原生组件和 API）、hello-world（发布前试跑用）、custom-tabbar（自定义 tabBar）、subpackages（分包预下载和分包异步化）、worker（Worker）
 tests/         unit / integration / e2e，playwright（用 fixture 写的用例）
 docs/          使用文档，同时是 VitePress 文档站点的源文件

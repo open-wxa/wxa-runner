@@ -83,6 +83,10 @@ importers:
       commander:
         specifier: ^11.1.0
         version: 11.1.0
+    devDependencies:
+      '@open-wxa/wxa-viewer':
+        specifier: workspace:*
+        version: link:../viewer
 
   packages/compiler:
     dependencies:
@@ -181,12 +185,6 @@ importers:
       '@open-wxa/wxa-runner-extractor':
         specifier: workspace:*
         version: link:../extractor
-      chalk:
-        specifier: ^4.1.2
-        version: 4.1.2
-      commander:
-        specifier: ^11.1.0
-        version: 11.1.0
       esbuild-wasm:
         specifier: 0.28.2
         version: 0.28.2
