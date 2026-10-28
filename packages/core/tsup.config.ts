@@ -13,6 +13,15 @@ export default defineConfig([
     shims: true,
     external: ['express', 'chokidar', 'ws', 'esbuild', '@open-wxa/wxa-runner-compiler', '@open-wxa/wxa-runner-extractor']
   },
+  // 不依赖 Node 的公开接口（wxa-runner-core/web）：单独构建，不和 Node 入口共用代码分割出的 chunk——那些 chunk 里有 __dirname 等 Node 垫片
+  {
+    entry: { web: 'src/web.ts' },
+    format: ['cjs', 'esm'],
+    platform: 'browser',
+    target: 'es2020',
+    dts: true,
+    sourcemap: true
+  },
   // 浏览器端：宿主页面、注入 iframe 的桥、Worker 里的原生接口、在 Network 面板里显示被拦截请求的 Service Worker
   {
     entry: {

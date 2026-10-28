@@ -19,8 +19,11 @@
 import { compileWxml, compileWxss, ComponentTags } from '@open-wxa/wxa-runner-compiler';
 import { transformSync } from 'esbuild';
 import { AppJson, MiniProgram } from './MiniProgram';
+import { toJs } from './toJs';
 import { createWxConfig } from './wxConfig';
 import { WxmlMirror } from './WxmlMirror';
+
+export { toJs };
 
 export interface BuildResult {
   version: number;
@@ -296,13 +299,6 @@ export function rewriteSafeAreaInsets(code: string): string {
   return code.replace(/\b(?:env|constant)\(\s*safe-area-inset-(top|right|bottom|left)\b/g, 'var(--wxa-safe-area-inset-$1');
 }
 
-/** JSON 序列化并转义 </script> 与行分隔符，结果可安全嵌入脚本 */
-export function toJs(value: unknown): string {
-  return JSON.stringify(value)
-    .replace(/</g, '\\u003c')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
-}
 
 function classifyFile(file: string): ChangeKind | null {
   if (file.endsWith('.json')) return 'config';

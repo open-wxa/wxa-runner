@@ -154,7 +154,7 @@ describe('FileStore', () => {
     fs.mkdir('http://usr/logs/a', true);
     fs.write('http://usr/logs/a/1.log', 'x');
     fs.write('http://usr/logs/a/1.log', 'y', true);
-    expect(fs.read('http://usr/logs/a/1.log').toString()).toBe('xy');
+    expect(new TextDecoder().decode(fs.read('http://usr/logs/a/1.log'))).toBe('xy');
     expect(fs.readdir('http://usr/logs')).toEqual(['a']);
   });
 

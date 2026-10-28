@@ -164,6 +164,40 @@ importers:
         specifier: ^5.3.2
         version: 5.9.3
 
+  packages/viewer:
+    dependencies:
+      '@open-wxa/wxa-runner-core':
+        specifier: workspace:*
+        version: link:../core
+      '@open-wxa/wxa-runner-extractor':
+        specifier: workspace:*
+        version: link:../extractor
+      chalk:
+        specifier: ^4.1.2
+        version: 4.1.2
+      commander:
+        specifier: ^11.1.0
+        version: 11.1.0
+      esbuild-wasm:
+        specifier: 0.28.2
+        version: 0.28.2
+      express:
+        specifier: ^4.18.2
+        version: 4.22.3
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
+    devDependencies:
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.25
+      tsup:
+        specifier: ^8.0.1
+        version: 8.5.1(jiti@2.6.1)(postcss@8.5.30)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.3.2
+        version: 5.9.3
+
 packages:
 
   '@11ty/gray-matter@2.1.0':
@@ -1801,6 +1835,11 @@ packages:
   es-toolkit@1.52.0:
     resolution: {integrity: sha512-XTNEJQh1tY1ZJVcf6ayP/2n4ZPyaHlW2FWs7xvw5ddPuhUVjLD3olQVQS7kf58JbAB48iL0uL/jerTrjtV3lDA==}
 
+  esbuild-wasm@0.28.2:
+    resolution: {integrity: sha512-GccVwhv3mmOUVQHCQm2Ox/rby8n/EqUwvZxE6Pjfikrq/lWw9g9WX/u9EykWnpot3Ko6j426DgQdea2xWKIAQA==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   esbuild@0.21.5:
     resolution: {integrity: sha512-mg3OPMV4hXywwpoDxu3Qda5xCKQi+vCTZq8S9J/EpkhB2HzKXq4SNFZE3+NK93JYxc8VMSep+lOUSC/RVKaBqw==}
     engines: {node: '>=12'}
@@ -1869,6 +1908,9 @@ packages:
     peerDependenciesMeta:
       picomatch:
         optional: true
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
 
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
@@ -4301,6 +4343,8 @@ snapshots:
 
   es-toolkit@1.52.0: {}
 
+  esbuild-wasm@0.28.2: {}
+
   esbuild@0.21.5:
     optionalDependencies:
       '@esbuild/aix-ppc64': 0.21.5
@@ -4464,6 +4508,8 @@ snapshots:
   fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
       picomatch: 4.0.7
+
+  fflate@0.8.3: {}
 
   fill-range@7.1.1:
     dependencies:

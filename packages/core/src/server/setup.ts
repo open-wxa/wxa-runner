@@ -5,9 +5,9 @@
 import fs from 'fs';
 import path from 'path';
 import { build, Plugin } from 'esbuild';
+import { SETUP_MODULE, SETUP_MODULE_SOURCE } from '../runtime/setupModule';
 
 export const SETUP_FILE_NAMES = ['wxa.setup.ts', 'wxa.setup.js', 'wxa.setup.mjs'];
-const SETUP_MODULE = '@open-wxa/wxa-runner-core/setup';
 const ENV_PREFIX = 'WXA_';
 
 /** 项目目录（project.config.json 所在目录）下约定名称的 setup 文件 */
@@ -55,8 +55,7 @@ function builtinSetupModule(): Plugin {
     setup(pluginBuild) {
       pluginBuild.onResolve({ filter: new RegExp(`^${SETUP_MODULE}$`) }, () => ({ path: SETUP_MODULE, namespace: 'wxa-setup' }));
       pluginBuild.onLoad({ filter: /.*/, namespace: 'wxa-setup' }, () => ({
-        // 与 src/setup.ts 的 defineSetup 一致：只为类型提示，运行时原样返回
-        contents: 'export function defineSetup(setup) { return setup; }',
+        contents: SETUP_MODULE_SOURCE,
         loader: 'js'
       }));
     }

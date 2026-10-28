@@ -27,6 +27,11 @@
       "import": "./dist/setup.mjs",
       "require": "./dist/setup.js"
     },
+    "./web": {
+      "types": "./dist/web.d.ts",
+      "import": "./dist/web.mjs",
+      "require": "./dist/web.js"
+    },
     "./test-api": {
       "types": "./dist/test-api.d.ts"
     }
@@ -35,6 +40,9 @@
     "*": {
       "setup": [
         "./dist/setup.d.ts"
+      ],
+      "web": [
+        "./dist/web.d.ts"
       ],
       "test-api": [
         "./dist/test-api.d.ts"

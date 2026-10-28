@@ -1,10 +1,13 @@
 /**
  * 宿主、逻辑层、渲染层的 HTML，以及 Worker 的入口脚本
+ *
+ * 不依赖 Node：查看器的 Service Worker 也用这些函数生成页面
  */
 
-import { BuildResult, toJs } from '../project/AppBuilder';
+import type { BuildResult } from '../project/AppBuilder';
+import { toJs } from '../project/toJs';
 import type { WebviewScript } from './DevServer';
-import { AppBuild, PluginCode, pluginScriptUrl } from './plugins';
+import { AppBuild, PluginCode, pluginScriptUrl } from './pluginCode';
 
 export function hostHtml(): string {
   return `<!DOCTYPE html>
@@ -171,7 +174,8 @@ export function pluginWebviewHtml(
   options: { scripts?: WebviewScript[] } = {}
 ): string {
   const id = Number(webviewId) || 0;
-  const page = plugin.files.get(`/${innerPath}.html`)?.toString('utf8') ?? `<script>console.error(${JSON.stringify(`[wxa-runner] 插件 ${plugin.alias} 里没有页面 ${innerPath}`)})</script>`;
+  const html = plugin.files.get(`/${innerPath}.html`);
+  const page = html ? new TextDecoder().decode(html) : `<script>console.error(${JSON.stringify(`[wxa-runner] 插件 ${plugin.alias} 里没有页面 ${innerPath}`)})</script>`;
   return `<!DOCTYPE html>
 <html>
 <head>

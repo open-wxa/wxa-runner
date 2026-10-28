@@ -5,7 +5,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MockMirror } from '../../packages/core/src/runtime/host/api/mockMirror';
+import { installMockMirror, MockMirror } from '../../packages/core/src/runtime/host/api/mockMirror';
 import { createNetworkApis } from '../../packages/core/src/runtime/host/api/network';
 import { MockedResponse, RequestRoutes } from '../../packages/core/src/runtime/host/api/routes';
 import { MOCK_ID_HEADER, MockReply } from '../../packages/core/src/runtime/networkPanel';
@@ -147,5 +147,37 @@ describe('在 Network 面板里显示被拦截的请求', () => {
       { url: 'https://api.example.com/api/order', response: expect.objectContaining({ statusCode: 201, body: '{"ok":true}' }) }
     ]);
     expect(events).toContainEqual(expect.objectContaining({ state: 'success', statusCode: 201, data: '{"ok":true}' }));
+  });
+});
+
+
+describe('宿主使用外部 Service Worker', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('查看器模式复用现有 controller，不注册会覆盖它的脚本', async () => {
+    const container = Object.assign(new FakeServiceWorkerContainer(), { register: vi.fn(async () => ({})) });
+    const fetchMock = vi.fn(() => new Promise<Response>(() => undefined));
+    vi.stubGlobal('navigator', { serviceWorker: container, webdriver: false });
+    vi.stubGlobal('fetch', fetchMock);
+    const mirror = installMockMirror(true);
+    mirror!.show(request, Promise.resolve(mocked), new AbortController().signal);
+    expect(container.register).not.toHaveBeenCalled();
+    expect(await askForReply(container, shownId(fetchMock))).toEqual(mocked);
+  });
+
+  it('默认模式保持注册 sw.js 的行为', () => {
+    const register = vi.fn(async () => ({}));
+    vi.stubGlobal('navigator', { serviceWorker: Object.assign(new FakeServiceWorkerContainer(), { register }), webdriver: false });
+    expect(installMockMirror()).toBeInstanceOf(MockMirror);
+    expect(register).toHaveBeenCalledWith('/__wxa__/runtime/sw.js', { scope: '/' });
+  });
+
+  it('外部 Service Worker 在自动化环境中仍可供查看器使用', () => {
+    const container = new FakeServiceWorkerContainer();
+    vi.stubGlobal('navigator', { serviceWorker: container, webdriver: true });
+    expect(installMockMirror(true)).toBeInstanceOf(MockMirror);
+    expect(installMockMirror()).toBeNull();
   });
 });

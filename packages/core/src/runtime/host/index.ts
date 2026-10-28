@@ -16,7 +16,7 @@ async function main() {
   const info: AppInfo = await (await fetch('/__wxa__/app-info.json')).json();
   const restore = new PageStackRestore(info.appid);
 
-  const sendReport = connectDevServer(restore);
+  const sendReport = info.liveReload === false ? () => undefined : connectDevServer(restore);
 
   if (info.buildError) {
     new PhoneShell(root, info.device).showError(`编译失败\n\n${info.buildError}`);

@@ -59,6 +59,10 @@ export interface AppInfo {
   device: DeviceProfile;
   /** 开启了 --devtools-login */
   devtoolsLogin?: boolean;
+  /** false 表示没有开发服务器，不建立热更新和报错转发连接 */
+  liveReload?: boolean;
+  /** 使用查看器已经注册的 Service Worker，宿主不能用 sw.js 替换它 */
+  externalServiceWorker?: boolean;
   buildError?: string;
   /** 配置了 setup 文件时存在；error 是 setup 的编译错误 */
   setup?: { env: Record<string, string>; error?: string };

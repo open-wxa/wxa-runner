@@ -36,8 +36,10 @@ try {
 }
 
 function readPackages() {
+  // private 的包（如 packages/viewer）不发布，也不参与版本号检查
   const dirs = fs.readdirSync(path.join(root, 'packages'))
-    .filter(dir => fs.existsSync(path.join(root, 'packages', dir, 'package.json')));
+    .filter(dir => fs.existsSync(path.join(root, 'packages', dir, 'package.json')))
+    .filter(dir => !JSON.parse(fs.readFileSync(path.join(root, 'packages', dir, 'package.json'), 'utf8')).private);
   const unlisted = dirs.filter(dir => !PACKAGE_DIRS.includes(dir));
   if (unlisted.length) throw new Error(`packages/${unlisted.join('、packages/')} 不在 PACKAGE_DIRS 里，请加到发布顺序中`);
 

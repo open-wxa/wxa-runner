@@ -61,14 +61,14 @@ export class MockMirror {
 }
 
 /**
- * 注册 Service Worker，不等它装好；用不了时返回 null
+ * 默认注册 Service Worker，不等它装好；externalServiceWorker 为 true 时复用现有 controller，用不了时返回 null
  *
  * 自动化测试里不注册：测试不看 Network 面板，Service Worker 还会让 Playwright 的 page.route 拦不到经过它的请求
  */
-export function installMockMirror(): MockMirror | null {
+export function installMockMirror(externalServiceWorker = false): MockMirror | null {
   // 不是安全上下文（如局域网 IP 访问）时没有 navigator.serviceWorker
-  if (navigator.webdriver || !navigator.serviceWorker) return null;
-  navigator.serviceWorker
+  if ((!externalServiceWorker && navigator.webdriver) || !navigator.serviceWorker) return null;
+  if (!externalServiceWorker) navigator.serviceWorker
     .register(SERVICE_WORKER_URL, { scope: '/' })
     .catch(error => console.warn('[wxa-runner] Service Worker 注册失败，被拦截的请求不会显示在 Network 面板里', error));
   return new MockMirror(navigator.serviceWorker);

@@ -37,13 +37,14 @@ import { AppBuilder } from '../project/AppBuilder';
 import { MiniProgram } from '../project/MiniProgram';
 import { MOCK_PREFIX, PROXY_PREFIX } from '../runtime/networkPanel';
 import type { AppInfo, DeviceProfile, ForwardConsole } from '../runtime/types';
-import { appserviceHtml, hostHtml, pluginWebviewHtml, subcontextHtml, webviewHtml, workerScript } from './html';
+import { hostHtml } from './html';
+import { AppSource, DEFAULT_DEVICE, routeApp } from './appRoutes';
 import { ignoreListSourceMap } from './ignoreList';
 import { ignoreConsoleHook, printBrowserReports } from './forwardConsole';
 import { handleProxy } from './proxy';
 import { planHotUpdate } from './hmr';
 import { developerTicketSource, TicketSource } from './developerTicket';
-import { AppBuild, findPluginPage, PluginStore } from './plugins';
+import { AppBuild, PluginStore } from './plugins';
 import { devtoolsLoginRouter } from './devtoolsLogin';
 import { requireUsableTicket, WechatDevClient } from './wechatDev';
 import { bundleSetup, collectSetupEnv, findSetupFile } from './setup';
@@ -69,6 +70,12 @@ export interface DevServerMiddleware {
 
 /** runner 自己使用的路径前缀，中间件不能占用 */
 const RESERVED_PREFIXES = ['/__wxa__', '/__baselib__', '/__plugin__'];
+
+/**
+ * 交给 routeApp 的路径；其余 /__wxa__ 路径（运行时、文件接口等）不用等构建。
+ * 渲染层下只认 .html：页面里用相对路径请求的图片等资源要交给后面的静态资源路由，不能带上 withBuild 的 no-store
+ */
+const APP_ROUTES = /^\/(?:__wxa__\/(?:appservice\.html|subcontext\.html|worker\.js|service-|page-|webview\/.+\.html$|plugin\/|module\/)|__plugin__\/)/;
 
 export interface DevServerOptions {
   projectPath: string;
@@ -114,16 +121,7 @@ export interface DevServerOptions {
   logger?: Pick<Console, 'log' | 'warn' | 'error'>;
 }
 
-export const DEFAULT_DEVICE: DeviceProfile = {
-  model: 'iPhone X',
-  screenWidth: 375,
-  screenHeight: 812,
-  pixelRatio: 3,
-  statusBarHeight: 44,
-  safeAreaBottom: 34,
-  system: 'iOS 16.0',
-  platform: 'devtools'
-};
+export { DEFAULT_DEVICE };
 
 export class DevServer {
   readonly project: MiniProgram;
@@ -298,79 +296,12 @@ export class DevServer {
       }
     });
 
-    app.get('/__wxa__/appservice.html', this.withBuild((build, req, res) => {
-      const launchPath = String(req.query.path || '').replace(/^\//, '');
-      const launch = build.pages.includes(launchPath)
-        ? { path: launchPath, query: Object.fromEntries(new URLSearchParams(String(req.query.query || ''))) }
-        : { path: build.pages[0], query: {} };
-      res.type('html').send(appserviceHtml(build, launch, { hot: this.hotEnabled, isolated: usesIsolatedContext(this.baseLib.version) }));
-    }));
-
-    app.get('/__wxa__/subcontext.html', (req, res) => {
-      const id = Number(req.query.id);
-      if (!Number.isInteger(id) || id <= 0) {
-        res.status(400).type('text').send('子上下文 id 无效');
-        return;
-      }
-      res.type('html').send(subcontextHtml(id, req.query.empty === '1'));
-    });
-
-    app.get(/^\/__wxa__\/webview\/(.+)\.html$/, this.withBuild((build, req, res, next) => {
-      const pagePath = decodeURIComponent(req.params[0]);
-      if (!build.pages.includes(pagePath)) return next();
-      const pluginPage = findPluginPage(build, pagePath);
-      const scripts = this.webviewScripts;
-      res.type('html').send(pluginPage
-        ? pluginWebviewHtml(build, pluginPage.plugin, pluginPage.innerPath, pagePath, Number(req.query.id), { scripts })
-        : webviewHtml(build, pagePath, Number(req.query.id), { hot: this.hotEnabled, scripts }));
-    }));
-
-    // 插件的逻辑层、渲染层代码
-    app.get('/__wxa__/plugin/:provider/:version/:file(appservice.js|pageframe.js)', this.withBuild((build, req, res, next) => {
-      const { provider, version, file } = req.params;
-      const code = build.plugins.find(plugin => plugin.provider === provider && plugin.version === version)?.files.get(`/${file}`);
-      if (!code) return next();
-      res.type('js').send(code);
-    }));
-    // 插件页面里的图片等资源：基础库把插件里的相对路径和 / 开头的路径都改写成站点根下的 /__plugin__/<插件 appid>/…
-    app.get(/^\/__plugin__\/([^/]+)(\/.+)$/, this.withBuild((build, req, res, next) => {
-      const file = build.plugins.find(plugin => plugin.provider === req.params[0])?.files.get(decodeURIComponent(req.params[1]));
-      if (!file) return next();
-      res.type(path.extname(req.params[1]) || 'application/octet-stream').send(file);
-    }));
-
-    app.get(/^\/__wxa__\/module\/(.+\.js)$/, this.withBuild((build, req, res) => {
-      const id = decodeURIComponent(req.params[0]);
-      if (!build.modules.includes(id) && !build.workerModules.includes(id)) {
-        res.status(404).type('js').send(`console.error(${JSON.stringify(`[wxa-runner] 模块 ${id} 不存在`)})`);
-        return;
-      }
-      res.type('js').send(this.builder.getModuleScript(id));
-    }));
-
-    app.get('/__wxa__/worker.js', this.withBuild((build, _req, res) => {
-      const hasWorker = fs.existsSync(path.join(this.baseLib.dir, 'WAWorker.js'));
-      res.type('js').send(workerScript(build, { version: this.baseLib.version, hasWorker }));
-    }));
-
-    app.get('/__wxa__/service-bootstrap.js', this.withBuild((build, _req, res) => {
-      res.type('js').send(build.serviceBootstrap);
-    }));
-
-    app.get('/__wxa__/service-templates.js', this.withBuild((build, _req, res) => {
-      res.type('js').send(build.serviceTemplates);
-    }));
-
-    app.get('/__wxa__/page-templates.js', this.withBuild((build, _req, res) => {
-      res.type('js').send(build.pageTemplates);
-    }));
-
-    app.get('/__wxa__/page-styles.js', this.withBuild((build, _req, res) => {
-      res.type('js').send(build.pageStyles);
-    }));
-
-    app.get('/__wxa__/page-frame.js', this.withBuild((build, _req, res) => {
-      res.type('js').send(build.pageFrame);
+    // 逻辑层、子上下文、渲染层的页面与代码，见 appRoutes.ts
+    app.get(APP_ROUTES, this.withBuild((build, req, res, next) => {
+      const response = routeApp(this.appSource(build), new URL(req.originalUrl, 'http://localhost'));
+      if (!response) return next();
+      res.status(response.status).type(response.type);
+      res.send(typeof response.body === 'string' ? response.body : Buffer.from(response.body.buffer, response.body.byteOffset, response.body.byteLength));
     }));
 
     app.get('/__wxa__/runtime/frame.js.map', (_req, res, next) => {
@@ -465,7 +396,7 @@ export class DevServer {
         res.status(404).end();
         return;
       }
-      const data = node.data;
+      const data = Buffer.from(node.data.buffer, node.data.byteOffset, node.data.byteLength);
       res.type(path.extname(req.params[0]));
       // 每次写入更新版本号，追加和 Range 请求不再对整份文件计算哈希。
       res.setHeader('ETag', `"${node.etag}"`);
@@ -526,6 +457,17 @@ export class DevServer {
   }
 
   /** 需要构建结果的路由；构建失败时返回错误文本 */
+  private appSource(build: AppBuild): AppSource {
+    return {
+      build,
+      moduleScript: id => this.builder.getModuleScript(id),
+      baseLib: { version: this.baseLib.version, hasWorker: fs.existsSync(path.join(this.baseLib.dir, 'WAWorker.js')) },
+      isolated: usesIsolatedContext(this.baseLib.version),
+      hot: this.hotEnabled,
+      webviewScripts: this.webviewScripts
+    };
+  }
+
   private withBuild(handler: (build: AppBuild, req: Request, res: Response, next: NextFunction) => void) {
     return async (req: Request, res: Response, next: NextFunction) => {
       res.setHeader('Cache-Control', 'no-store');
@@ -545,18 +487,9 @@ export class DevServer {
   }
 
   private runtimeDir(): string {
-    const candidates = [
-      this.options.runtimeDir,
-      path.join(__dirname, 'runtime'),
-      path.join(__dirname, '../runtime'),
-      path.join(__dirname, '../../dist/runtime')
-    ].filter((dir): dir is string => !!dir);
-    const found = candidates.find(dir => fs.existsSync(path.join(dir, 'host.js')));
-    if (!found) {
-      throw new Error('找不到浏览器端运行时（host.js），请先执行 pnpm build');
-    }
-    return found;
+    return findRuntimeDir(this.options.runtimeDir);
   }
+
 
   /** 只在监听文件变化时打开基础库的热更新开关，跑测试（watch: false）时运行环境与真机一致 */
   private get hotEnabled(): boolean {
@@ -601,10 +534,10 @@ export class DevServer {
 
 const DEFAULT_PORT = 3000;
 /** 监听所有地址时，本机访问用的地址：0.0.0.0 只监听 IPv4，localhost 可能解析到 IPv6 的 ::1 */
-const LOCAL_HOST_OF_ANY_ADDRESS = new Map([['0.0.0.0', '127.0.0.1'], ['::', 'localhost']]);
+export const LOCAL_HOST_OF_ANY_ADDRESS = new Map([['0.0.0.0', '127.0.0.1'], ['::', 'localhost']]);
 
 /** 开始监听，返回实际的端口。没指定端口时从 3000 起往后找空闲的，换了端口在终端提示 */
-async function listen(server: http.Server, port: number | undefined, host: string, logger: Pick<Console, 'warn'>): Promise<number> {
+export async function listen(server: http.Server, port: number | undefined, host: string, logger: Pick<Console, 'warn'>): Promise<number> {
   for (let candidate = port ?? DEFAULT_PORT; ; candidate++) {
     // macOS 允许本机地址和所有地址上各有一个进程占着同一端口，两个方向都能绑定成功，打开 localhost 会进到哪边说不准
     const taken = (await takenOnLocalAddresses(candidate)) || !(await bind(server, candidate, host));
@@ -662,4 +595,22 @@ function resolveSetupFile(option: string | false | undefined, projectPath: strin
   const file = path.resolve(option);
   if (!fs.existsSync(file)) throw new Error(`找不到 setup 文件：${file}`);
   return file;
+}
+
+/**
+ * 浏览器端运行时（host.js、frame.js 等）所在目录：给了 explicit 就用它，否则找本包的构建产物
+ * @throws 都没有 host.js 时（源码运行但还没 pnpm build）
+ */
+export function findRuntimeDir(explicit?: string): string {
+  const candidates = [
+    explicit,
+    path.join(__dirname, 'runtime'),
+    path.join(__dirname, '../runtime'),
+    path.join(__dirname, '../../dist/runtime')
+  ].filter((dir): dir is string => !!dir);
+  const found = candidates.find(dir => fs.existsSync(path.join(dir, 'host.js')));
+  if (!found) {
+    throw new Error('找不到浏览器端运行时（host.js），请先执行 pnpm build');
+  }
+  return found;
 }
