@@ -1,6 +1,6 @@
 {
   "name": "@open-wxa/wxa-viewer",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "private": true,
   "description": "Run WeChat Mini Programs from a prebuilt .wxapack in the browser, without the source or a dev server",
   "license": "MIT",

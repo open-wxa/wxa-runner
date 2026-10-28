@@ -1,0 +1,22 @@
+// 只有 .less、没有 .wxss：开发者工具和 wxa-runner 都把它编译成 mine.wxss
+// @brand、@gap 来自 app.less，.pill() 来自显式 @import 的 styles/mixins.less
+@import '../../styles/mixins.less';
+
+.profile {
+  .title {
+    color: @brand;
+  }
+
+  #mine-visits {
+    padding: @gap 0;
+  }
+}
+
+.tags {
+  margin-top: @gap;
+
+  .tag {
+    .pill(@brand);
+    margin-right: (@gap / 2);
+  }
+}

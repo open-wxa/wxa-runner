@@ -3,6 +3,8 @@
 覆盖 wxa-runner 主要功能的小程序，`tests/e2e/showcase.test.ts` 和 `tests/integration/devserver.test.ts` 都用它。
 
 - 首页、详情、我的：基础渲染、自定义组件、路由、tabBar，由 e2e 测试逐项断言
+- less：`project.config.json` 开启了 less 编译插件（`useCompilerPlugins: ["less"]`）。全局样式写在 `app.less`，
+  「我的」页只有 `mine.less`，用到 `app.less` 的变量和 `styles/mixins.less` 的 mixin
 - 「能力」tab：原生组件和 API 的演示页，用来在开发者工具和浏览器里人工对照。每个页面底部有事件日志，
   记下事件名和参数（带毫秒时间，新的在上），完整内容同时打到控制台
 

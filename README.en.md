@@ -98,6 +98,7 @@ See [docs/testing.md](./docs/testing.md) (in Chinese) for configuration, mocking
 | Area | Supported |
 | --- | --- |
 | Rendering | WXML, WXSS, WXS, custom components, App / Page / Component lifecycles |
+| Style preprocessing | The less / sass compiler plugins of WeChat DevTools (`setting.useCompilerPlugins` in `project.config.json`), working out of the box (a `less` / `sass` installed in your project takes precedence) |
 | Routing | navigateTo, redirectTo and the other page routes, a 10-level page stack, tab bar |
 | Subpackages | Regular and independent subpackages, preloading (preloadRule), async subpackages: components (componentPlaceholder) and JS (require.async) from other subpackages. All code is loaded at startup, with nothing to download |
 | Workers | wx.createWorker: messages both ways (ArrayBuffers included), terminate, workers as a subpackage. Asynchronous file APIs work inside a worker |
@@ -115,6 +116,7 @@ CI covers only the bundled 3.7.0; the other versions are checked locally with `W
 - Base library 3.7.1 and later is never picked automatically: choose it with `--baselib` or `WXA_BASELIB`, and a warning says it is outside the verified range. The bundled base library is 3.7.0 only, so download newer versions in WeChat DevTools first
 - Unimplemented native APIs return success; tests can catch them through `errors()` (see [docs/testing.md](./docs/testing.md#检查运行时错误))
 - No Bluetooth or other device capabilities
+- The `typescript` compiler plugin isn't supported: `.ts` files aren't loaded, so compile them to `.js` first
 - A few `MapContext` methods of the map component, such as `toScreenLocation`, `fromScreenLocation` and ground overlays, are missing from the base library's web implementation and never call back (see [PROJECT_DESIGN.md](./PROJECT_DESIGN.md#原生组件))
 - Plugin pages work with `--devtools-login`; plugin components and `requirePlugin` don't yet ([#56](https://github.com/open-wxa/wxa-runner/issues/56))
 - Inside a worker only asynchronous APIs work: synchronous ones such as `readFileSync` throw, and `request`, `downloadFile`, `uploadFile` and `connectSocket` fail, because the base library needs their task IDs synchronously. A worker can only talk to the page asynchronously; waiting synchronously would need the whole page to be cross-origin isolated, which would block cross-origin images and other resources

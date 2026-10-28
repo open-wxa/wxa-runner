@@ -11,7 +11,7 @@ export default defineConfig([
     dts: { entry: { index: 'src/index.ts', setup: 'src/setup.ts', 'test-api': 'src/test-api.ts' } },
     sourcemap: true,
     shims: true,
-    external: ['express', 'chokidar', 'ws', 'esbuild', '@open-wxa/wxa-runner-compiler', '@open-wxa/wxa-runner-extractor']
+    external: ['express', 'chokidar', 'ws', 'esbuild', 'less', 'sass', '@open-wxa/wxa-runner-compiler', '@open-wxa/wxa-runner-extractor']
   },
   // 不依赖 Node 的公开接口（wxa-runner-core/web）：单独构建，不和 Node 入口共用代码分割出的 chunk——那些 chunk 里有 __dirname 等 Node 垫片
   {

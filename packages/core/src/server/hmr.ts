@@ -7,9 +7,11 @@ export interface HotUpdatePlan {
   templates: string[];
   /** 逻辑要更新的页面和组件（不带扩展名） */
   scripts: string[];
-  /** 改动的样式文件（不带扩展名），包括 app.wxss 和被 @import 的文件 */
+  /** 改动的样式文件（不带扩展名），包括 app.wxss、被 @import 的文件，以及 less / sass 源文件和它们引用的 .css */
   styles: string[];
 }
+
+const STYLE_FILE = /\.(wxss|less|scss|sass|css)$/;
 
 /**
  * @param files 相对小程序根目录的改动文件
@@ -20,8 +22,8 @@ export function planHotUpdate(files: string[], units: { pages: string[]; compone
   const plan: HotUpdatePlan = { templates: [], scripts: [], styles: [] };
 
   for (const file of files) {
-    const id = file.replace(/\.(wxml|js|wxss)$/, '');
-    const target = file.endsWith('.wxss')
+    const id = file.replace(/\.(wxml|js|wxss|less|scss|sass|css)$/, '');
+    const target = STYLE_FILE.test(file)
       ? plan.styles
       : !owners.has(id) ? null : file.endsWith('.wxml') ? plan.templates : file.endsWith('.js') ? plan.scripts : null;
     if (!target) return null;

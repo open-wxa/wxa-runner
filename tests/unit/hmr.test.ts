@@ -33,6 +33,14 @@ describe('热更新分流', () => {
     });
   });
 
+  it('less / sass 源文件和它们引用的 .css 改动走样式热替换', () => {
+    expect(planHotUpdate(['pages/index/index.less', 'components/badge/badge.scss', 'app.less', 'styles/_vars.sass', 'styles/theme.css'], units)).toEqual({
+      templates: [],
+      scripts: [],
+      styles: ['pages/index/index', 'components/badge/badge', 'app', 'styles/_vars', 'styles/theme']
+    });
+  });
+
   it.each([
     ['app.wxss', 'app'],
     ['styles/common.wxss', 'styles/common']

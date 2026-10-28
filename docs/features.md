@@ -32,6 +32,7 @@ wxa-runner 用的是和开发者工具同一套官方基础库，渲染、组件
 | 能力 | 支持 |
 | --- | --- |
 | 渲染 | WXML、WXSS、WXS、自定义组件，App / Page / Component 生命周期 |
+| 样式预处理 | 开发者工具的 less / sass 编译插件（`project.config.json` 的 `setting.useCompilerPlugins`），规则见下文 |
 | 路由 | navigateTo、redirectTo 等页面路由，10 层页面栈，tabBar |
 | 分包 | 普通分包、独立分包，分包预下载（preloadRule），分包异步化：跨分包引用组件（componentPlaceholder）和 JS（require.async）。代码启动时全部加载，没有下载过程 |
 | Worker | wx.createWorker：和 Worker 互发消息（包括 ArrayBuffer）、terminate，workers 配置为分包。Worker 里能用异步的文件接口 |
@@ -44,12 +45,27 @@ wxa-runner 用的是和开发者工具同一套官方基础库，渲染、组件
 
 基础库已验证 2.32.3、3.3.4、3.5.8、3.7.0；3.7.1 和 3.8.8 上全部测试也通过，但默认不会选用，见下文。
 
+## less / sass
+
+`project.config.json` 里开启了编译插件时（如 `"useCompilerPlugins": ["less"]`），按开发者工具的规则把 `.less` / `.scss` / `.sass` 编译成同名的 WXSS：
+
+- 开箱即用，和开发者工具一样不用另装编译器：项目里安装了 `less` / `sass` 时用项目里的版本，没装时用 wxa-runner 自带的（less 4、sass 1.99）
+- 同一路径既有 `.less`（或 `.scss` / `.sass`）又有 `.wxss` 时用预处理文件的编译结果，`.wxss` 不生效
+- 每个 `.less` 自动引用小程序根目录的 `app.less`，能直接用里面的变量和 mixin（可以用 `setting.lessSetting.commonUseFilePath` 换成别的文件）；
+  `.scss` / `.sass` 自动 `@use` 根目录的 `global.scss` 或 `global.sass`，通过 `global.$变量` 使用
+- `["less", { "globalVars": { ... } }]` 给出的全局变量在每个 `.less` 里都能用
+- `@import "x.wxss";` 原样保留，交给 WXSS 编译器处理
+- 开发中修改 `useCompilerPlugins` 等设置后重新编译，不用重启
+
+没有开启编译插件时，`.less` / `.scss` 文件不会生效（开发者工具也一样），启动时会在终端提示。
+
 ## 已知限制
 
 - **基础库版本**：3.7.1 起的基础库不会自动选用，要用 `--baselib` 或 `WXA_BASELIB` 指定，启动时提示超出已验证的范围。
   内置基础库只有 3.7.0，更新的版本要先在开发者工具里下载
 - **未实现的 API**：还没有实现的原生 API 调用后返回成功，以免打断业务代码。测试里会被发现，见[检查运行时错误](./testing.md#检查运行时错误)
 - **设备能力**：不支持蓝牙等设备能力
+- **TypeScript 编译插件**：`useCompilerPlugins` 里的 `typescript` 不支持，`.ts` 文件不会被加载，要先编译成 `.js`
 - **地图**：MapContext 的 toScreenLocation、fromScreenLocation、地面覆盖物等方法在基础库的网页实现里没有，调用后不会回调
   （详见[设计文档](https://github.com/open-wxa/wxa-runner/blob/main/PROJECT_DESIGN.md#原生组件)）
 - **插件**：只支持插件页面，要加 `--devtools-login`；插件的自定义组件和 `requirePlugin` 暂不支持（[#56](https://github.com/open-wxa/wxa-runner/issues/56)）
