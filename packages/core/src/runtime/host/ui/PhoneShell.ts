@@ -8,6 +8,7 @@ import { element } from './dom';
 import { openImagePreview } from './ImagePreview';
 import { openPicker, PickerOptions, PickerSession } from './Picker';
 import { DEVICE_BEZEL, SHELL_CSS, STAGE_GAP, STAGE_PADDING } from './styles';
+import { TabBarItemView, tabBarView } from './tabBarView';
 
 export interface NavigationState {
   title: string;
@@ -295,30 +296,29 @@ export class PhoneShell {
     this.tabBar.classList.toggle('is-hidden', !visible);
     if (!config || !visible) return;
 
-    this.tabBar.style.background = config.backgroundColor || '#f7f7f7';
-    this.tabBar.style.borderTopColor = config.borderStyle === 'white' ? 'rgba(255,255,255,.3)' : 'rgba(0,0,0,.1)';
-    this.tabBar.innerHTML = '';
-    config.list.forEach((item, index) => {
-      const selected = item.pagePath === selectedPath;
-      const el = document.createElement('div');
-      el.className = 'wxa-tabbar-item' + (selected ? ' is-selected' : '');
-      el.dataset.pagePath = item.pagePath;
-      el.style.color = selected ? (config.selectedColor || '#07c160') : (config.color || '#7a7e83');
-      const icon = selected ? item.selectedIconPath || item.iconPath : item.iconPath;
-      const iconBox = element('span', 'wxa-tabbar-icon');
-      if (icon) {
-        const img = document.createElement('img');
-        img.src = /^https?:\/\//.test(icon) ? icon : '/' + icon.replace(/^\//, '');
-        iconBox.appendChild(img);
-        el.appendChild(iconBox);
-      }
-      const text = element('span', 'wxa-tabbar-text', item.text || '');
-      el.appendChild(text);
-      // 没有图标时标记挂在文字右上角
-      if (item.mark) (icon ? iconBox : text).appendChild(markElement(item.mark));
-      el.addEventListener('click', () => this.onTabTap(item.pagePath, index));
-      this.tabBar.appendChild(el);
-    });
+    const view = tabBarView(config, selectedPath);
+    this.tabBar.style.background = view.background;
+    this.tabBar.style.borderTopColor = view.borderTopColor;
+    this.tabBar.replaceChildren(...view.items.map((item, index) => this.tabBarItemElement(item, index)));
+  }
+
+  private tabBarItemElement(item: TabBarItemView, index: number): HTMLElement {
+    const el = element('div', 'wxa-tabbar-item' + (item.selected ? ' is-selected' : ''));
+    el.dataset.pagePath = item.pagePath;
+    el.style.color = item.color;
+    const iconBox = element('span', 'wxa-tabbar-icon');
+    if (item.icon) {
+      const img = document.createElement('img');
+      img.src = item.icon;
+      iconBox.appendChild(img);
+      el.appendChild(iconBox);
+    }
+    const text = element('span', 'wxa-tabbar-text', item.text);
+    el.appendChild(text);
+    // 没有图标时标记挂在文字右上角
+    if (item.mark) (item.icon ? iconBox : text).appendChild(markElement(item.mark));
+    el.addEventListener('click', () => this.onTabTap(item.pagePath, index));
+    return el;
   }
 
   private tabBarVisible(): boolean {

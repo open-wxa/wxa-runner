@@ -36,119 +36,135 @@ export interface WeixinJSContextOptions {
 
 /** 在逻辑层主上下文里提供 window.WeixinJSContext，必须在基础库之前调用 */
 export function installWeixinJSContext(main: Window, host: HostApi, options: WeixinJSContextOptions) {
-  const boot = new AppBoot(host);
-  const mainContext = new JsContext(MAIN_CONTEXT_ID, 'main', main);
-  const contexts = new Map<number, JsContext>([[MAIN_CONTEXT_ID, mainContext]]);
-  let nextId = MAIN_CONTEXT_ID + 1;
-
-  const open = (name: string | undefined, empty: boolean): JsContext => {
-    const context = openSubContext(main, nextId++, name, empty);
-    contexts.set(context.id, context);
-    if (context.isApp) boot.reach('load');
-    return context;
+  const contexts = new JsContexts(main, host, options);
+  (main as any).WeixinJSContext = contexts.nativeInterface;
+  // subcontext.html 通过 parent.__wxaContexts 回调这两个入口
+  (main as any).__wxaContexts = {
+    prepare: (id: number, win: Window) => contexts.prepare(id, win),
+    loaded: (id: number) => contexts.loaded(id)
   };
+}
 
-  /** 原生接口的结果码：1 成功，0 失败 */
-  const withContext = (id: number, action: (context: JsContext) => number): number => {
-    const context = contexts.get(Number(id));
-    if (context) return action(context);
-    console.warn(`[wxa-runner] 找不到 JS 上下文 ${id}`);
-    return 0;
-  };
+/** 主上下文和它创建的子上下文 */
+class JsContexts {
+  private readonly boot: AppBoot;
+  private readonly mainContext: JsContext;
+  private readonly contexts = new Map<number, JsContext>();
+  private nextId = MAIN_CONTEXT_ID + 1;
 
-  /** 执行基础库要求的脚本文件：带回调时等上下文加载完再异步执行，否则同步执行 */
-  const evaluate = (context: JsContext, file: string, done?: Callback): number => {
-    const isEntry = context.isApp && file.replace(/^\/+/, '') === APP_SERVICE_ENTRY;
-    const urls = isEntry ? options.appServiceScripts : null;
-    if (!urls) {
-      console.warn(`[wxa-runner] 基础库要求执行未知脚本 ${file}`);
-      return 0;
-    }
-    const start = () => {
-      boot.reach('run');
-      // 与旧版基础库一样，必须在业务代码注册 Page / Component 之前打开
-      if (options.hot) (context.win as any).__virtualDOM__?.enableUpdateWxAppCode?.();
-    };
-    if (done) {
-      context.whenReady(() => {
-        start();
-        loadScripts(context.win!, urls, () => {
-          done();
-          boot.finish();
-        });
-      });
-    } else {
-      start();
-      context.runSync(urls);
-      boot.finish();
-    }
-    return 1;
-  };
-
-  const evaluateAll = (context: JsContext, files: string[], done?: Callback): number => {
-    if (!done) return files.every(file => evaluate(context, file) === 1) ? 1 : 0;
-    let remaining = files.length;
-    if (remaining === 0) done();
-    for (const file of files) {
-      if (evaluate(context, file, () => --remaining === 0 && done()) === 0) return 0;
-    }
-    return 1;
-  };
-
-  const nativeInterface = {
+  /** 交给基础库的原生接口。基础库会把方法取下来单独调用，所以都不依赖 this */
+  readonly nativeInterface = {
     mainContextId: MAIN_CONTEXT_ID,
-    alloc: (name?: string, callback?: Callback) => open(name, false).whenReady(callback).id,
-    allocEmpty: (name?: string, callback?: Callback) => open(name, true).whenReady(callback).id,
-    create(entry: string | undefined, name?: string, callback?: Callback) {
-      const context = open(name, false);
-      if (entry) context.whenReady(() => evaluate(context, entry, callback));
-      else context.whenReady(callback);
+    alloc: (name?: string, callback?: Callback) => this.open(name, false).whenReady(callback).id,
+    allocEmpty: (name?: string, callback?: Callback) => this.open(name, true).whenReady(callback).id,
+    create: (entry: string | undefined, name?: string, callback?: Callback) => {
+      const context = this.open(name, false);
+      context.whenReady(entry ? () => this.evaluate(context, entry, callback) : callback);
       return context.id;
     },
     evaluateScriptFile: (id: number, file: string, callback?: Callback) =>
-      withContext(id, context => evaluate(context, file, callback)),
+      this.withContext(id, context => this.evaluate(context, file, callback)),
     loadJsFiles: (id: number, files: string, callback?: Callback) =>
-      withContext(id, context => evaluateAll(context, JSON.parse(files), callback)),
+      this.withContext(id, context => this.evaluateAll(context, JSON.parse(files), callback)),
     /** 基础库自己的文件（如 WARenderContext.js），同步执行 */
     loadLibFiles: (id: number, files: string) =>
-      withContext(id, context => {
+      this.withContext(id, context => {
         context.runSync((JSON.parse(files) as string[]).map(file => `/__baselib__/${file}`));
         return 1;
       }),
-    destroy(id: number, callback?: Callback) {
-      const context = contexts.get(Number(id));
-      if (!context || context === mainContext) return;
-      contexts.delete(context.id);
-      context.destroy();
-      if (context.isApp) host.registerAppContext(null);
-      callback?.();
-    }
+    destroy: (id: number, callback?: Callback) => this.destroy(id, callback)
   };
 
-  (main as any).WeixinJSContext = nativeInterface;
+  constructor(private readonly main: Window, private readonly host: HostApi, private readonly options: WeixinJSContextOptions) {
+    this.boot = new AppBoot(host);
+    this.mainContext = new JsContext(MAIN_CONTEXT_ID, 'main', main);
+    this.contexts.set(MAIN_CONTEXT_ID, this.mainContext);
+  }
 
-  // subcontext.html 通过 parent.__wxaContexts 回调这两个入口
-  (main as any).__wxaContexts = {
-    /** 子上下文页面开始执行，基础库之前：交给它基础库需要的全局变量 */
-    prepare(id: number, win: Window) {
-      const context = contexts.get(id);
-      if (!context || context === mainContext) throw new Error(`[wxa-runner] 未知的子上下文 ${id}`);
-      context.win = win;
-      Object.assign(win, { WeixinJSContext: nativeInterface, WeixinJSContextId: id, __wxConfig: (main as any).__wxConfig });
-      if (context.isApp) host.registerAppContext(win);
-    },
-    /** 子上下文页面执行完（基础库已初始化） */
-    loaded(id: number) {
-      const context = contexts.get(id);
-      if (!context) return;
-      context.markReady();
-      if (context.isApp) {
-        boot.reach('entry');
-        // 真机上由客户端在主包就绪后派发，基础库收到后才执行业务入口
-        options.dispatchNative('onSubPackageReady', { moduleName: '__APP__' });
-      }
+  /** 子上下文页面开始执行，基础库之前：交给它基础库需要的全局变量 */
+  prepare(id: number, win: Window) {
+    const context = this.contexts.get(id);
+    if (!context || context === this.mainContext) throw new Error(`[wxa-runner] 未知的子上下文 ${id}`);
+    context.win = win;
+    Object.assign(win, { WeixinJSContext: this.nativeInterface, WeixinJSContextId: id, __wxConfig: (this.main as any).__wxConfig });
+    if (context.isApp) this.host.registerAppContext(win);
+  }
+
+  /** 子上下文页面执行完（基础库已初始化） */
+  loaded(id: number) {
+    const context = this.contexts.get(id);
+    if (!context) return;
+    context.markReady();
+    if (context.isApp) {
+      this.boot.reach('entry');
+      // 真机上由客户端在主包就绪后派发，基础库收到后才执行业务入口
+      this.options.dispatchNative('onSubPackageReady', { moduleName: '__APP__' });
     }
-  };
+  }
+
+  private open(name: string | undefined, empty: boolean): JsContext {
+    const context = openSubContext(this.main, this.nextId++, name, empty);
+    this.contexts.set(context.id, context);
+    if (context.isApp) this.boot.reach('load');
+    return context;
+  }
+
+  /** 原生接口的结果码：1 成功，0 失败 */
+  private withContext(id: number, action: (context: JsContext) => number): number {
+    const context = this.contexts.get(Number(id));
+    if (context) return action(context);
+    console.warn(`[wxa-runner] 找不到 JS 上下文 ${id}`);
+    return 0;
+  }
+
+  /** 执行基础库要求的脚本文件：带回调时等上下文加载完再异步执行，否则同步执行 */
+  private evaluate(context: JsContext, file: string, done?: Callback): number {
+    // 基础库只会要求执行业务代码入口
+    if (!context.isApp || file.replace(/^\/+/, '') !== APP_SERVICE_ENTRY) {
+      console.warn(`[wxa-runner] 基础库要求执行未知脚本 ${file}`);
+      return 0;
+    }
+    const urls = this.options.appServiceScripts;
+    if (done) {
+      context.whenReady(() => {
+        this.startApp(context);
+        loadScripts(context.win!, urls, () => {
+          done();
+          this.boot.finish();
+        });
+      });
+    } else {
+      this.startApp(context);
+      context.runSync(urls);
+      this.boot.finish();
+    }
+    return 1;
+  }
+
+  private startApp(context: JsContext) {
+    this.boot.reach('run');
+    // 与旧版基础库一样，必须在业务代码注册 Page / Component 之前打开
+    if (this.options.hot) (context.win as any).__virtualDOM__?.enableUpdateWxAppCode?.();
+  }
+
+  private evaluateAll(context: JsContext, files: string[], done?: Callback): number {
+    if (!done) return files.every(file => this.evaluate(context, file) === 1) ? 1 : 0;
+    let remaining = files.length;
+    if (remaining === 0) done();
+    for (const file of files) {
+      if (this.evaluate(context, file, () => --remaining === 0 && done()) === 0) return 0;
+    }
+    return 1;
+  }
+
+  private destroy(id: number, callback?: Callback) {
+    const context = this.contexts.get(Number(id));
+    if (!context || context === this.mainContext) return;
+    this.contexts.delete(context.id);
+    context.destroy();
+    if (context.isApp) this.host.registerAppContext(null);
+    callback?.();
+  }
 }
 
 /** 一个 JS 上下文：主上下文是逻辑层 iframe 本身，子上下文是其中的一个同源 iframe */

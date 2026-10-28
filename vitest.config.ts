@@ -27,7 +27,7 @@ export default defineConfig({
         'packages/core/src/runtime/host/api/webView.ts',
         'packages/core/src/runtime/host/api/libFiles.ts',
         'packages/core/src/runtime/syncScript.ts',
-        'packages/core/src/runtime/host/ui/**'
+        'packages/core/src/runtime/host/ui/!(tabBarView).ts'
       ],
       reporter: ['text-summary', 'text']
     }

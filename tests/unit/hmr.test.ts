@@ -1,8 +1,9 @@
 /**
- * 热更新的分流：哪些改动能热更新，哪些必须整页刷新
+ * 热更新的分流：哪些改动能热更新，哪些必须整页刷新；以及 Page() 页面换上新代码时保留哪些状态
  */
 
 import { describe, expect, it } from 'vitest';
+import { swapMethods } from '../../packages/core/src/runtime/host/hmr';
 import { planHotUpdate } from '../../packages/core/src/server/hmr';
 
 const units = { pages: ['pages/index/index', 'pages/detail/detail'], components: ['components/badge/badge'] };
@@ -70,5 +71,48 @@ describe('热更新分流', () => {
 
   it('一次保存里只要有一个文件不能热更新，就整页刷新', () => {
     expect(planHotUpdate(['pages/index/index.wxml', 'app.js'], units)).toBeNull();
+  });
+});
+
+describe('Page() 页面换上新代码', () => {
+  /** 活着的页面实例：setData 合并进 data */
+  const livePage = (fields: Record<string, unknown>) => {
+    const page: Record<string, any> = {
+      ...fields,
+      setData(patch: Record<string, unknown>) {
+        Object.assign(page.data, patch);
+      }
+    };
+    return page;
+  };
+
+  it('方法一律换成新的', () => {
+    const page = livePage({ data: {}, onTap: () => 'old' });
+    swapMethods(page, { onTap: () => 'new', onShare: () => 'share' });
+
+    expect(page.onTap()).toBe('new');
+    expect(page.onShare()).toBe('share');
+  });
+
+  it('运行时改过的 data 保持不动，新代码新增的 data 字段补上，改了初始值的不生效', () => {
+    const page = livePage({ data: { count: 5 } });
+    swapMethods(page, { data: { count: 0, tab: 'all' } });
+
+    expect(page.data).toEqual({ count: 5, tab: 'all' });
+  });
+
+  it('其他非函数字段同样视为状态：已有的不覆盖，新增的补上', () => {
+    const page = livePage({ data: {}, pageSize: 20 });
+    swapMethods(page, { pageSize: 50, cacheKey: 'list' });
+
+    expect(page).toMatchObject({ pageSize: 20, cacheKey: 'list' });
+  });
+
+  it('新代码没有 data 时不调用 setData', () => {
+    const page = livePage({ data: { count: 1 } });
+    page.setData = () => {
+      throw new Error('不应调用 setData');
+    };
+    expect(() => swapMethods(page, { onTap() {} })).not.toThrow();
   });
 });

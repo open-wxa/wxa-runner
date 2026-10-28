@@ -23,37 +23,47 @@ export interface HotUpdate {
  * @throws 拿不到新代码、新代码执行出错、模块没有调用 Page() / Component() 等无法热更新的情况；调用方应整页刷新
  */
 export async function applyHotUpdate(host: Host, update: HotUpdate): Promise<void> {
-  const hasTemplates = update.templates.length > 0;
-  const hasStyles = update.styles.length > 0;
-  const v = `?v=${update.version}`;
-  const [pageStyles, pageTemplates, serviceTemplates, moduleScripts] = await Promise.all([
-    hasStyles ? fetchText(`/__wxa__/page-styles.js${v}`) : '',
-    hasTemplates ? fetchText(`/__wxa__/page-templates.js${v}`) : '',
-    hasTemplates ? fetchText(`/__wxa__/service-templates.js${v}`) : '',
-    Promise.all(update.scripts.map(id => fetchText(`/__wxa__/module/${encodeURI(id)}.js${v}`)))
-  ]);
+  const code = await fetchHotCode(update);
 
   // 与路由串行：跳转进行到一半时页面列表和实例都不稳定
   await host.enqueueRoute(async () => {
     const service = host.serviceWindow() as any;
     if (!service?.__virtualDOM__?.updateWxAppCode) throw new Error('基础库的热更新开关没有打开');
+    const pageWindows = host.livePages().flatMap(page => (page.win ? [page.win as any] : []));
 
-    if (hasStyles) {
-      for (const page of host.livePages()) {
-        if (page.win) updateStyles(page.win as any, pageStyles);
-      }
+    if (code.pageStyles !== null) {
+      for (const win of pageWindows) updateStyles(win, code.pageStyles);
     }
-
-    if (hasTemplates) {
+    if (code.templates) {
       // 渲染层先换上新模板，逻辑层随后发出的重新渲染指令才能对上
-      for (const page of host.livePages()) {
-        if (page.win) updateTemplates(page.win as any, pageTemplates, update.templates);
-      }
-      updateTemplates(service, serviceTemplates, update.templates);
+      for (const win of pageWindows) updateTemplates(win, code.templates.page, update.templates);
+      updateTemplates(service, code.templates.service, update.templates);
     }
-
-    update.scripts.forEach((id, index) => updateScript(service, host, id, moduleScripts[index]));
+    update.scripts.forEach((id, index) => updateScript(service, host, id, code.scripts[index]));
   });
+}
+
+interface HotCode {
+  /** 没有样式改动时为 null */
+  pageStyles: string | null;
+  /** 渲染层和逻辑层各自的模板代码；没有模板改动时为 null */
+  templates: { page: string; service: string } | null;
+  /** 与 update.scripts 一一对应 */
+  scripts: string[];
+}
+
+/** 只取这次改动涉及的代码，带上版本号避开缓存 */
+async function fetchHotCode(update: HotUpdate): Promise<HotCode> {
+  const v = `?v=${update.version}`;
+  const [pageStyles, templates, scripts] = await Promise.all([
+    update.styles.length > 0 ? fetchText(`/__wxa__/page-styles.js${v}`) : null,
+    update.templates.length > 0
+      ? Promise.all([fetchText(`/__wxa__/page-templates.js${v}`), fetchText(`/__wxa__/service-templates.js${v}`)])
+        .then(([page, service]) => ({ page, service }))
+      : null,
+    Promise.all(update.scripts.map(id => fetchText(`/__wxa__/module/${encodeURI(id)}.js${v}`)))
+  ]);
+  return { pageStyles, templates, scripts };
 }
 
 /**
@@ -198,7 +208,7 @@ function loadModule(service: any, script: string, hotId: string): Registration |
  * 方法一律换新；data 和其他非函数字段（如 pageSize）可能已被运行时改过，属于状态：
  * 已有的保持不动，只补上新增的，改了初始值的对当前实例不生效
  */
-function swapMethods(instance: any, definition: Record<string, any>) {
+export function swapMethods(instance: any, definition: Record<string, any>) {
   for (const [key, value] of Object.entries(definition)) {
     if (typeof value === 'function') instance[key] = value;
     else if (key !== 'data' && !(key in instance)) instance[key] = value;
