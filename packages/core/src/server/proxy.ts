@@ -26,32 +26,9 @@ const DROPPED_RESPONSE_HEADERS = new Set(['content-encoding', 'content-length', 
 export async function handleProxy(req: Request, res: Response) {
   const target = fromServerPath(PROXY_PREFIX, req.originalUrl);
   if (!target) {
-    res.status(400).set('x-wxa-proxy-error', '1').send(`invalid url "${req.originalUrl}"`);
+    sendProxyError(res, 400, `invalid url "${req.originalUrl}"`);
     return;
   }
-
-  let requestHeaders: Record<string, string> = {};
-  try {
-    requestHeaders = JSON.parse(req.get('x-wxa-headers') || '{}');
-  } catch {
-    // 头格式错误时按无自定义头处理
-  }
-  const headers: Record<string, string> = {};
-  for (const [key, value] of Object.entries(requestHeaders)) {
-    if (!DROPPED_REQUEST_HEADERS.has(key.toLowerCase()) && value !== undefined && value !== null) {
-      headers[key] = String(value);
-    }
-  }
-  // 上传文件时 multipart 的 boundary 只有浏览器生成的 content-type 里才有
-  const browserContentType = req.get('content-type') || '';
-  if (browserContentType.startsWith('multipart/form-data')) {
-    for (const key of Object.keys(headers)) {
-      if (key.toLowerCase() === 'content-type') delete headers[key];
-    }
-    headers['content-type'] = browserContentType;
-  }
-
-  const hasBody = !['GET', 'HEAD'].includes(req.method) && Buffer.isBuffer(req.body) && req.body.length > 0;
 
   const controller = new AbortController();
   const cancel = () => controller.abort();
@@ -62,41 +39,80 @@ export async function handleProxy(req: Request, res: Response) {
     try {
       upstream = await fetch(target, {
         method: req.method,
-        headers,
-        body: hasBody ? req.body : undefined,
+        headers: forwardedRequestHeaders(req.get('x-wxa-headers'), req.get('content-type')),
+        body: requestBody(req),
         redirect: 'follow',
         signal: controller.signal
       });
     } catch (error) {
       if (res.destroyed || controller.signal.aborted) return;
-      const cause = (error as any)?.cause?.message;
-      res.status(502).set('x-wxa-proxy-error', '1').send(cause || (error as Error).message);
+      sendProxyError(res, 502, fetchErrorMessage(error));
       return;
     }
-
-    const responseHeaders: Record<string, string> = {};
-    upstream.headers.forEach((value, key) => {
-      responseHeaders[key] = value;
-    });
-    const setCookies = typeof upstream.headers.getSetCookie === 'function' ? upstream.headers.getSetCookie() : [];
-
-    res.status(upstream.status);
-    upstream.headers.forEach((value, key) => {
-      if (!DROPPED_RESPONSE_HEADERS.has(key)) res.setHeader(key, value);
-    });
-    res.setHeader('x-wxa-headers', encodeURIComponent(JSON.stringify(responseHeaders)));
-    res.setHeader('x-wxa-set-cookie', encodeURIComponent(JSON.stringify(setCookies)));
-    // 不等响应结束：长连接的响应头和数据块要立即到达浏览器。
-    res.flushHeaders();
-    if (!upstream.body) {
-      res.end();
-      return;
-    }
-    await pipeline(Readable.fromWeb(upstream.body as ReadableStream), res);
+    await relayResponse(upstream, res);
   } catch (error) {
     // 响应头已经发出，流中断时关闭连接，让客户端收到失败，而不是补发一个 502。
     if (!res.destroyed) res.destroy(error as Error);
   } finally {
     res.off('close', cancel);
   }
+}
+
+function requestBody(req: Request): BodyInit | undefined {
+  const hasBody = !['GET', 'HEAD'].includes(req.method) && Buffer.isBuffer(req.body) && req.body.length > 0;
+  return hasBody ? req.body : undefined;
+}
+
+/** fetch 连不上时 message 只有 "fetch failed"，具体原因（ECONNREFUSED 等）在 cause 里 */
+function fetchErrorMessage(error: unknown): string {
+  return (error as any)?.cause?.message || (error as Error).message;
+}
+
+function sendProxyError(res: Response, status: number, message: string) {
+  res.status(status).set('x-wxa-proxy-error', '1').send(message);
+}
+
+/**
+ * 小程序设置的请求头，去掉 fetch 不允许或无意义的。上传文件时 multipart 的 boundary 只有浏览器生成的
+ * content-type 里才有，所以这时 content-type 用浏览器的
+ */
+function forwardedRequestHeaders(encoded: string | undefined, browserContentType = ''): Record<string, string> {
+  const multipart = browserContentType.startsWith('multipart/form-data');
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parseHeaders(encoded))) {
+    const name = key.toLowerCase();
+    if (DROPPED_REQUEST_HEADERS.has(name) || (multipart && name === 'content-type') || value === undefined || value === null) continue;
+    headers[key] = String(value);
+  }
+  if (multipart) headers['content-type'] = browserContentType;
+  return headers;
+}
+
+/** 头格式错误时按无自定义头处理 */
+function parseHeaders(encoded = '{}'): Record<string, unknown> {
+  try {
+    return JSON.parse(encoded);
+  } catch {
+    return {};
+  }
+}
+
+/** 照搬状态码和响应头，另把全部响应头和 set-cookie 编码进 x-wxa-headers / x-wxa-set-cookie，再流式转发响应体 */
+async function relayResponse(upstream: globalThis.Response, res: Response) {
+  const responseHeaders: Record<string, string> = {};
+  upstream.headers.forEach((value, key) => {
+    responseHeaders[key] = value;
+    if (!DROPPED_RESPONSE_HEADERS.has(key)) res.setHeader(key, value);
+  });
+  res.status(upstream.status);
+  res.setHeader('x-wxa-headers', encodeURIComponent(JSON.stringify(responseHeaders)));
+  const setCookies = typeof upstream.headers.getSetCookie === 'function' ? upstream.headers.getSetCookie() : [];
+  res.setHeader('x-wxa-set-cookie', encodeURIComponent(JSON.stringify(setCookies)));
+  // 不等响应结束：长连接的响应头和数据块要立即到达浏览器。
+  res.flushHeaders();
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+  await pipeline(Readable.fromWeb(upstream.body as ReadableStream), res);
 }

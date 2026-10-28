@@ -179,4 +179,21 @@ describe('FileStore', () => {
     expect(fs.readdir('/__wxa__/usr/s1')).toEqual([]);
     expect(fs.readdir('/__wxa__/tmp/s1')).toEqual([]);
   });
+
+  it('copyFile 复制内容，getFileInfo 给出字节数，unlink 删除文件但不能删目录', () => {
+    const fs = new FileStore(['/usr']);
+    fs.execute('writeFile', { filePath: '/usr/a.txt', data: '中文', encoding: 'utf8' });
+    fs.execute('copyFile', { srcPath: '/usr/a.txt', destPath: '/usr/b.txt' });
+    expect(fs.execute('readFile', { filePath: '/usr/b.txt', encoding: 'utf8' })).toEqual({ data: '中文' });
+    expect(fs.execute('getFileInfo', { filePath: '/usr/b.txt' })).toEqual({ size: 6 });
+
+    fs.execute('unlink', { filePath: '/usr/a.txt' });
+    expect(() => fs.execute('access', { path: '/usr/a.txt' })).toThrow('no such file or directory /usr/a.txt');
+    expect(fs.execute('access', { path: '/usr/b.txt' })).toEqual({});
+    expect(() => fs.execute('unlink', { filePath: '/usr' })).toThrow('operation not permitted');
+  });
+
+  it('不支持的操作报错并指出操作名', () => {
+    expect(() => new FileStore().execute('chmod', {})).toThrow('unsupported filesystem operation chmod');
+  });
 });

@@ -18,7 +18,22 @@ beforeAll(async () => {
     let body = '';
     req.on('data', chunk => (body += chunk));
     req.on('end', () => {
+      if (req.url === '/no-content') {
+        res.statusCode = 204;
+        res.end();
+        return;
+      }
+      if (req.url === '/broken') {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.write('partial');
+        setTimeout(() => res.destroy(), 20);
+        return;
+      }
       res.setHeader('Set-Cookie', ['sid=abc; Path=/', 'theme=dark']);
+      if (req.url === '/content-type') {
+        res.end(JSON.stringify({ contentType: req.headers['content-type'] }));
+        return;
+      }
       res.setHeader('X-Upstream', 'v=1; "quoted", list');
       res.setHeader('Content-Type', 'application/json');
       res.statusCode = req.url === '/missing' ? 404 : 200;
@@ -69,6 +84,35 @@ describe('网络代理', () => {
       expect(res.status, path).toBe(200);
       expect((await res.json()).path, path).toBe(path);
     }
+  });
+
+  it('x-wxa-headers 不是合法 JSON 时按没有自定义请求头转发', async () => {
+    const res = await fetch(proxied(upstreamUrl + '/echo'), { headers: { 'x-wxa-headers': '{broken' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ method: 'GET', path: '/echo' });
+  });
+
+  it('上传文件（multipart）时用浏览器生成的 content-type，小程序设置的 content-type 带不上 boundary，被替换', async () => {
+    const form = new FormData();
+    form.append('file', new Blob(['x']), 'a.txt');
+    const res = await fetch(proxied(upstreamUrl + '/content-type'), {
+      method: 'POST',
+      headers: { 'x-wxa-headers': JSON.stringify({ 'Content-Type': 'multipart/form-data' }) },
+      body: form
+    });
+    expect((await res.json()).contentType).toMatch(/^multipart\/form-data; boundary=.+/);
+  });
+
+  it('上游没有响应体时照样返回状态码', async () => {
+    const res = await fetch(proxied(upstreamUrl + '/no-content'));
+    expect(res.status).toBe(204);
+    expect(await res.text()).toBe('');
+  });
+
+  it('响应体传到一半上游断开时，浏览器端的请求失败，而不是拿到截断的内容', async () => {
+    const res = await fetch(proxied(upstreamUrl + '/broken'));
+    expect(res.status).toBe(200);
+    await expect(res.text()).rejects.toThrow();
   });
 
   it('保留上游的状态码', async () => {

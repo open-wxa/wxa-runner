@@ -88,56 +88,72 @@ export class FileStore {
     this.nodes.delete(target);
   }
 
+  /** 文件 API 经开发服务器调用的操作，参数和返回值的字段名与基础库一致 */
   execute(operation: string, args: any): Record<string, any> {
-    switch (operation) {
-      case 'readFile': {
-        const data = this.read(args.filePath);
-        return args.encoding === undefined ? { data: data.toString('base64'), binary: true } : { data: data.toString(args.encoding) };
-      }
-      case 'writeFile':
-      case 'appendFile': {
-        const data = Buffer.from(args.data ?? '', args.binary ? 'base64' : args.encoding || 'utf8');
-        this.write(args.filePath, data, operation === 'appendFile');
-        return {};
-      }
-      case 'copyFile':
-        this.write(args.destPath, this.read(args.srcPath));
-        return {};
-      case 'access':
-        if (!this.stat(args.path)) throw new Error(`no such file or directory ${args.path}`);
-        return {};
-      case 'stat': {
-        const node = this.stat(args.path);
-        if (!node) throw new Error(`no such file or directory ${args.path}`);
-        const stats = {
-          mode: node.dir ? 0o40755 : 0o100644,
-          size: node.data.length,
-          lastAccessedTime: Math.floor(node.mtime / 1000),
-          lastModifiedTime: Math.floor(node.mtime / 1000)
-        };
-        return { stats, ...stats };
-      }
-      case 'getFileInfo':
-        return { size: this.read(args.filePath).length };
-      case 'mkdir':
-        this.mkdir(args.dirPath, !!args.recursive);
-        return {};
-      case 'readdir':
-        return { files: this.readdir(args.dirPath) };
-      case 'unlink':
-        this.remove(args.filePath, { dir: false });
-        return {};
-      case 'rmdir': {
-        const target = this.normalize(args.dirPath);
-        const prefix = target === '/' ? '/' : target + '/';
-        if (this.roots.some(root => root === target || root.startsWith(prefix))) {
-          throw new Error(`operation not permitted ${args.dirPath}`);
-        }
-        this.remove(args.dirPath, { dir: true, recursive: !!args.recursive });
-        return {};
-      }
-      default:
-        throw new Error(`unsupported filesystem operation ${operation}`);
+    if (!Object.prototype.hasOwnProperty.call(this.operations, operation)) {
+      throw new Error(`unsupported filesystem operation ${operation}`);
+    }
+    return this.operations[operation](args);
+  }
+
+  private readonly operations: Record<string, (args: any) => Record<string, any>> = {
+    readFile: ({ filePath, encoding }) => {
+      const data = this.read(filePath);
+      return encoding === undefined ? { data: data.toString('base64'), binary: true } : { data: data.toString(encoding) };
+    },
+    writeFile: args => this.writeEncoded(args, false),
+    appendFile: args => this.writeEncoded(args, true),
+    copyFile: ({ srcPath, destPath }) => {
+      this.write(destPath, this.read(srcPath));
+      return {};
+    },
+    access: ({ path }) => {
+      this.existing(path);
+      return {};
+    },
+    stat: ({ path }) => {
+      const node = this.existing(path);
+      const stats = {
+        mode: node.dir ? 0o40755 : 0o100644,
+        size: node.data.length,
+        lastAccessedTime: Math.floor(node.mtime / 1000),
+        lastModifiedTime: Math.floor(node.mtime / 1000)
+      };
+      return { stats, ...stats };
+    },
+    getFileInfo: ({ filePath }) => ({ size: this.read(filePath).length }),
+    mkdir: ({ dirPath, recursive }) => {
+      this.mkdir(dirPath, !!recursive);
+      return {};
+    },
+    readdir: ({ dirPath }) => ({ files: this.readdir(dirPath) }),
+    unlink: ({ filePath }) => {
+      this.remove(filePath, { dir: false });
+      return {};
+    },
+    rmdir: ({ dirPath, recursive }) => {
+      this.assertNotRoot(dirPath);
+      this.remove(dirPath, { dir: true, recursive: !!recursive });
+      return {};
+    }
+  };
+
+  private writeEncoded(args: { filePath: string; data?: string; binary?: boolean; encoding?: BufferEncoding }, append: boolean) {
+    this.write(args.filePath, Buffer.from(args.data ?? '', args.binary ? 'base64' : args.encoding || 'utf8'), append);
+    return {};
+  }
+
+  private existing(filePath: string): FsNode {
+    const node = this.stat(filePath);
+    if (!node) throw new Error(`no such file or directory ${filePath}`);
+    return node;
+  }
+
+  private assertNotRoot(dirPath: string) {
+    const target = this.normalize(dirPath);
+    const prefix = target === '/' ? '/' : target + '/';
+    if (this.roots.some(root => root === target || root.startsWith(prefix))) {
+      throw new Error(`operation not permitted ${dirPath}`);
     }
   }
 }
