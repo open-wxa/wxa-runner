@@ -11,7 +11,7 @@ export default defineConfig([
     dts: { entry: { index: 'src/index.ts', setup: 'src/setup.ts', 'test-api': 'src/test-api.ts' } },
     sourcemap: true,
     shims: true,
-    external: ['express', 'chokidar', 'ws', 'esbuild', '@open-wxa/wxa-runner-compiler', '@open-wxa/wxa-runner-extractor']
+    external: ['express', 'chokidar', 'ws', 'esbuild', 'less', 'sass', '@open-wxa/wxa-runner-compiler', '@open-wxa/wxa-runner-extractor']
   },
   // 浏览器端：宿主页面、注入 iframe 的桥、Worker 里的原生接口、在 Network 面板里显示被拦截请求的 Service Worker
   {

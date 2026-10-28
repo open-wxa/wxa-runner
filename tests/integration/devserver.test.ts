@@ -176,8 +176,8 @@ describe.skipIf(!ready)('DevServer', () => {
 
   it('基础库与小程序静态资源都能访问，渲染层路径下的相对资源也能解析', async () => {
     expect((await get('/__baselib__/WAWebview.js')).status).toBe(200);
-    expect((await get('/app.wxss')).status).toBe(200);
-    expect((await get('/__wxa__/webview/app.wxss')).status).toBe(200);
+    expect((await get('/assets/logo.png')).status).toBe(200);
+    expect((await get('/__wxa__/webview/assets/logo.png')).status).toBe(200);
   });
 });
 

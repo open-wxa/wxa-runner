@@ -317,6 +317,21 @@ describe.skipIf(!e2eReady)('showcase 示例', () => {
     expect(await page.evaluate(() => typeof window.__wxa_test_api__.getStorage('showcase:visits'))).toBe('number');
   });
 
+  it('开启 less 编译插件后，只有 .less 的页面用上 app.less 的变量和 @import 的 mixin', async () => {
+    const frame = await open('/?path=pages/mine/mine');
+    const style = (selector: string) => frame.evaluate(s => {
+      const { color, paddingTop, backgroundColor, borderRadius, marginRight } = getComputedStyle(document.querySelector(s)!);
+      return { color, paddingTop, backgroundColor, borderRadius, marginRight };
+    }, selector);
+    // @brand 来自 app.less；16rpx 在 375 宽的设备上是 8px
+    expect(await style('.title')).toMatchObject({ color: 'rgb(7, 193, 96)' });
+    expect(await style('#mine-visits')).toMatchObject({ paddingTop: '8px' });
+    // .pill() 来自 styles/mixins.less
+    expect(await style('.tag')).toMatchObject({ backgroundColor: 'rgb(7, 193, 96)', color: 'rgb(255, 255, 255)', marginRight: '4px' });
+    // app.less 自己的规则照常生效
+    expect(await frame.evaluate(() => getComputedStyle(document.querySelector('.card')!).padding)).toBe('12px');
+  });
+
   it('默认字号固定为 16px，不受浏览器字号设置影响', async () => {
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'wxa-chrome-'));
     fs.mkdirSync(path.join(profile, 'Default'));

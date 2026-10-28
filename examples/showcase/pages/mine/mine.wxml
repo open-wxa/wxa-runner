@@ -1,4 +1,8 @@
-<view class="card">
+<view class="card profile">
   <text class="title">我的</text>
   <view id="mine-visits">首页访问次数：{{visits}}</view>
+  <view class="tags">
+    <text class="tag">less 变量</text>
+    <text class="tag">less mixin</text>
+  </view>
 </view>

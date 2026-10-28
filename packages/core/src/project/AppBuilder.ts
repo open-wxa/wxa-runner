@@ -9,7 +9,8 @@
  *
  * 渲染层（page-frame）:
  *   1. 完整版 $gwx（wcc -cc）与每个页面/组件的 __wxAppCode__ json / wxml（pageTemplates）
- *   2. wcsc 的公共样式运行时 + app.wxss，与每个页面/组件的 __wxAppCode__ wxss（pageStyles）
+ *   2. wcsc 的公共样式运行时 + app.wxss，与每个页面/组件的 __wxAppCode__ wxss（pageStyles）。
+ *      开启 less / sass 编译插件时，先把 .less / .scss / .sass 编译成 .wxss（见 StyleMirror）
  *   两部分在热更新时分别下发
  *   样式和模板里的 env(safe-area-inset-*) 改写成 CSS 变量，见 rewriteSafeAreaInsets
  *
@@ -19,6 +20,7 @@
 import { compileWxml, compileWxss, ComponentTags } from '@open-wxa/wxa-runner-compiler';
 import { transformSync } from 'esbuild';
 import { AppJson, MiniProgram } from './MiniProgram';
+import { StyleMirror } from './StyleMirror';
 import { createWxConfig } from './wxConfig';
 import { WxmlMirror } from './WxmlMirror';
 
@@ -74,6 +76,8 @@ export class AppBuilder {
 
   /** 设置了 wxmlTransform 时才有 */
   private readonly wxmlMirror: WxmlMirror | null;
+  /** 开启了 less / sass 编译插件时才有；插件设置变了就换一个 */
+  private styleMirror: { setting: string; mirror: StyleMirror } | null = null;
 
   constructor(readonly project: MiniProgram, options: AppBuilderOptions = {}) {
     this.wxmlMirror = options.wxmlTransform ? new WxmlMirror(options.wxmlTransform) : null;
@@ -84,9 +88,10 @@ export class AppBuilder {
     return this.wxmlMirror?.directory ?? null;
   }
 
-  /** 删除 wxmlTransform 的镜像目录，开发服务器关闭时调用 */
+  /** 删除 wxmlTransform 和样式预处理的镜像目录，开发服务器关闭时调用 */
   dispose(): void {
     this.wxmlMirror?.dispose();
+    this.styleMirror?.mirror.dispose();
   }
 
   /** 根据变化的文件标记需要重新构建的部分；返回 true 表示需要刷新 */
@@ -233,13 +238,26 @@ export class AppBuilder {
 
   /** 与开发者工具一致，项目里的 wxss 全部交给 wcsc：被 @import 的文件（如 uni-app 的 common/main.wxss）也要在列表里 */
   private async compileStyles(units: string[]) {
-    const pageFiles = units.filter(id => this.project.exists(id + '.wxss')).map(id => `./${id}.wxss`);
-    const commonFiles = this.project.listFiles(['.wxss']).map(file => `./${file}`).filter(file => !pageFiles.includes(file));
-    const { comm, pages } = await compileWxss({ cwd: this.project.root, pageFiles, commonFiles });
+    const mirror = this.currentStyleMirror();
+    const { cwd, files } = mirror ? await mirror.sync(this.project) : { cwd: this.project.root, files: this.project.listFiles(['.wxss']) };
+    const styles = new Set(files);
+    const pageFiles = units.filter(id => styles.has(id + '.wxss')).map(id => `./${id}.wxss`);
+    const commonFiles = files.map(file => `./${file}`).filter(file => !pageFiles.includes(file));
+    const { comm, pages } = await compileWxss({ cwd, pageFiles, commonFiles });
     return {
       comm: rewriteSafeAreaInsets(comm),
       pages: Object.fromEntries(Object.entries(pages).map(([file, css]) => [file, rewriteSafeAreaInsets(css)]))
     };
+  }
+
+  private currentStyleMirror(): StyleMirror | null {
+    const setting = this.project.styleSetting;
+    const key = JSON.stringify(setting);
+    if (this.styleMirror?.setting !== key) {
+      this.styleMirror?.mirror.dispose();
+      this.styleMirror = setting.plugins.length > 0 ? { setting: key, mirror: new StyleMirror(setting) } : null;
+    }
+    return this.styleMirror?.mirror ?? null;
   }
 
   /** $gwx 加上各页面、组件的 json / wxml 注册；逻辑层用裁剪版 $gwx，渲染层用完整版 */
@@ -307,7 +325,8 @@ export function toJs(value: unknown): string {
 function classifyFile(file: string): ChangeKind | null {
   if (file.endsWith('.json')) return 'config';
   if (file.endsWith('.wxml') || file.endsWith('.wxs')) return 'wxml';
-  if (file.endsWith('.wxss')) return 'wxss';
+  // less / sass 可以引用 .css
+  if (/\.(wxss|less|scss|sass|css)$/.test(file)) return 'wxss';
   if (file.endsWith('.js')) return 'js';
   return null;
 }

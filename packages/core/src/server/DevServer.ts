@@ -35,6 +35,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { readRegionData, resolveBaseLib, ResolvedBaseLib, usesIsolatedContext } from '@open-wxa/wxa-runner-extractor';
 import { AppBuilder } from '../project/AppBuilder';
 import { MiniProgram } from '../project/MiniProgram';
+import { ignoredStyleSources } from '../project/StyleMirror';
 import { MOCK_PREFIX, PROXY_PREFIX } from '../runtime/networkPanel';
 import type { AppInfo, DeviceProfile, ForwardConsole } from '../runtime/types';
 import { appserviceHtml, hostHtml, pluginWebviewHtml, subcontextHtml, webviewHtml, workerScript } from './html';
@@ -156,6 +157,11 @@ export class DevServer {
   constructor(private readonly options: DevServerOptions) {
     this.logger = options.logger || console;
     this.project = new MiniProgram(path.resolve(options.projectPath));
+    for (const { plugin, files } of ignoredStyleSources(this.project, this.project.styleSetting)) {
+      this.logger.warn(
+        `[wxa-runner] ${files.length} 个 ${plugin} 样式文件不会生效（如 ${files[0]}）：project.config.json 的 setting.useCompilerPlugins 没有开启 ${plugin}，开发者工具同样不编译它们`
+      );
+    }
     const extended = applyExtensions(options, options.extensions ?? [], { projectPath: this.project.projectPath, root: this.project.root });
     extended.middlewares.forEach(({ path: mountPath }) => assertMountPath(mountPath));
     this.webviewScripts = extended.webviewScripts;
@@ -569,7 +575,11 @@ export class DevServer {
 
     // 项目目录下的 setup 文件不一定在小程序根目录（miniprogramRoot）里
     const watched = [this.project.root];
-    if (this.setupFile && path.relative(this.project.root, this.setupFile).startsWith('..')) watched.push(this.setupFile);
+    const outsideRoot = (file: string) => path.relative(this.project.root, file).startsWith('..');
+    if (this.setupFile && outsideRoot(this.setupFile)) watched.push(this.setupFile);
+    // less / sass 编译插件的设置在这里，改了要重新编译样式
+    const projectConfig = path.join(this.project.projectPath, 'project.config.json');
+    if (outsideRoot(projectConfig) && fs.existsSync(projectConfig)) watched.push(projectConfig);
 
     this.watcher = watchProject(this.project.root, watched, async ({ files, structural }) => {
       const reloadOnly = structural || lastBuildFailed;

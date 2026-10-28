@@ -8,6 +8,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { readStyleSetting, StyleSetting } from './StyleMirror';
 
 export interface AppJson {
   pages: string[];
@@ -50,6 +51,11 @@ export class MiniProgram {
     if (!fs.existsSync(path.join(this.root, 'app.json'))) {
       throw new Error(`${this.root} 下没有 app.json，不是有效的小程序目录`);
     }
+  }
+
+  /** project.config.json 里与 less / sass 编译插件有关的设置；每次重新读取，开发中修改了也能生效 */
+  get styleSetting(): StyleSetting {
+    return readStyleSetting(readJsonFile(path.join(this.projectPath, 'project.config.json'))?.setting);
   }
 
   readAppJson(): AppJson {

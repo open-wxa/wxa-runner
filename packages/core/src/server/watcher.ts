@@ -22,7 +22,7 @@ export interface ProjectWatcher {
 
 const DEBOUNCE = 120;
 const IGNORED = /(^|[/\\])(node_modules|\.git)([/\\]|$)/;
-const FINGERPRINTED = /\.(js|mjs|ts|json|wxml|wxss|wxs)$/;
+const FINGERPRINTED = /\.(js|mjs|ts|json|wxml|wxss|wxs|less|scss|sass|css)$/;
 
 /**
  * @param root 报告的路径相对这个目录
