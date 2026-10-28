@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.10.0](https://github.com/open-wxa/wxa-runner/compare/v0.9.0...v0.10.0) (2026-10-28)
+
+
+### 新功能
+
+* 支持开发者工具的 less / sass 编译插件（useCompilerPlugins） ([#87](https://github.com/open-wxa/wxa-runner/issues/87)) ([3a2992b](https://github.com/open-wxa/wxa-runner/commit/3a2992b48d2657f798d3675ce2a6d1d48d8d9218)), closes [#85](https://github.com/open-wxa/wxa-runner/issues/85)
+
 ## [0.9.0](https://github.com/open-wxa/wxa-runner/compare/v0.8.2...v0.9.0) (2026-10-27)
 
 
