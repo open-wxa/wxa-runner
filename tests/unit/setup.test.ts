@@ -216,6 +216,13 @@ describe('setup 拦截请求', () => {
     expect(Date.now() - start).toBeGreaterThanOrEqual(95);
   });
 
+  it('delay 为 0 的拦截规则正常响应', async () => {
+    const { target, request } = createTarget();
+    await applySetup({ network: { routes: { '**/auth/login': { delay: 0, body: { ok: true } } } } }, target, {});
+
+    expect(JSON.parse((await request({ url: LOGIN })).data)).toEqual({ ok: true });
+  });
+
   it('延迟中的请求被 abort 时以失败结束', async () => {
     const { target, invoke, events } = createTarget();
     await applySetup({ network: { routes: { '**/auth/login': { delay: 200, body: {} } } } }, target, {});
@@ -246,6 +253,7 @@ describe('setup 拦截请求', () => {
       .rejects.toThrow(/network\.routes\["FETCH https:\/\/a\.com\/x"\]/);
     await expect(applySetup({ network: { rotes: {} } } as any, target, {})).rejects.toThrow(/rotes.*routes/);
     await expect(applySetup({ network: { routes: { '**/x': { delay: -1 } } } }, target, {})).rejects.toThrow(/delay/);
+    await expect(applySetup({ network: { routes: { '**/x': '{"ok":true}' } } } as any, target, {})).rejects.toThrow(/响应对象/);
   });
 });
 

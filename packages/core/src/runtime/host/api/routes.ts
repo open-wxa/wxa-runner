@@ -28,7 +28,7 @@ export interface MatchedRoute {
   /** 命中的规则，即添加时的写法 */
   pattern: string;
   /** @throws 延迟期间 signal 被 abort 时，抛出 signal.reason */
-  respond(signal?: AbortSignal): Promise<MockedResponse>;
+  respond(signal: AbortSignal): Promise<MockedResponse>;
 }
 
 export class RequestRoutes {
@@ -101,11 +101,11 @@ function checkDelay(delay: unknown) {
   }
 }
 
-function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (signal?.aborted) return reject(signal.reason);
+    if (signal.aborted) return reject(signal.reason);
     const timer = setTimeout(resolve, ms);
-    signal?.addEventListener('abort', () => {
+    signal.addEventListener('abort', () => {
       clearTimeout(timer);
       reject(signal.reason);
     }, { once: true });

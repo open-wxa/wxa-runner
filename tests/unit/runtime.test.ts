@@ -131,6 +131,16 @@ describe('Storage', () => {
     expect(storage.info('s3').keys).toEqual(['k']);
   });
 
+  it('getStorageInfo 按 KB 报告已用空间（每个字符算 2 字节，向上取整），上限 10MB', () => {
+    const apis = createStorageApis(new MiniProgramStorage(new MemoryStore(), 'wx1'));
+    const info = () => apis.getStorageInfoSync({}, { ...context, api: 'getStorageInfoSync' }) as Record<string, any>;
+    expect(info()).toEqual({ keys: [], currentSize: 0, limitSize: 10240 });
+
+    apis.setStorageSync({ key: 'k', data: 'x'.repeat(4096), dataType: 'String' }, { ...context, api: 'setStorageSync' });
+    // 4096 个字符是 8KB，键名和序列化附带的类型信息另占几十字节
+    expect(info()).toMatchObject({ keys: ['k'], currentSize: 9 });
+  });
+
   it('不同 appid 的数据互不可见', () => {
     const store = new MemoryStore();
     new MiniProgramStorage(store, 'a').set('s0', 'k', '1');
