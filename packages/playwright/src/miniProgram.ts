@@ -6,12 +6,15 @@
  * 函数形式的 mock、route 留在 Node 里执行，浏览器经 page.exposeFunction 的通道按编号调用。
  */
 
-import type { FrameLocator, Page } from '@playwright/test';
+import type { BrowserContext, FrameLocator, Page } from '@playwright/test';
 import type { ApiContext, ApiResult, FrameError, MockResponse, RecordedRequest, WxaTestApi } from '@open-wxa/wxa-runner-core';
 import type {} from '@open-wxa/wxa-runner-core/test-api';
 import { MiniProgramRequest, withBody } from './request';
 
 type Remote<T> = { [K in keyof T]: T[K] extends (...args: infer A) => infer R ? (...args: A) => Promise<Awaited<R>> : never };
+
+/** 注入 web-view 所在浏览器上下文的 Cookie，与 Playwright BrowserContext.addCookies 的单项参数相同 */
+export type WebViewCookie = Parameters<BrowserContext['addCookies']>[0][number];
 
 /** 原样转发给浏览器的测试 API，说明复用 WxaTestApi 的注释 */
 type ForwardedApi = Remote<Pick<WxaTestApi,
@@ -28,6 +31,12 @@ export type RouteHandler = (request: MiniProgramRequest) => MockResponse | void 
 export interface MiniProgram extends ForwardedApi {
   /** 当前页的渲染层，始终指向页面栈顶：跳转后不用重新获取 */
   readonly current: FrameLocator;
+  /**
+   * 给之后打开的 web-view 页面注入 Cookie，支持跨域和 httpOnly Cookie。
+   * 必须在 web-view 发起首次请求前调用，例如打开含 web-view 的页面前，或点击进入 H5 的按钮前。
+   * 同名 Cookie 的覆盖规则、url/domain/path 等字段与 Playwright BrowserContext.addCookies 相同。
+   */
+  setWebViewCookies(cookies: WebViewCookie[]): Promise<void>;
   /**
    * 打开小程序，等它启动完成。同一个用例里再次调用会整页重新加载，之前的 mock、route（包括撤销）仍然生效
    * @param url 启动页和参数，如 pages/detail/detail?id=1，开头的 / 可有可无；默认是首页
@@ -227,6 +236,7 @@ export async function createMiniProgram(page: Page, { baseURL, listPages }: Mini
 
   const miniProgram: MiniProgram = {
     current: page.frameLocator('iframe[data-current]'),
+    setWebViewCookies: cookies => page.context().addCookies(cookies),
 
     async open(url = '') {
       // 参数值里也可能有 ?，只按第一个分开

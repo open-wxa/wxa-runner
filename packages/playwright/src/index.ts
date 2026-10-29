@@ -16,7 +16,7 @@ import { miniProgramMatchers } from './matchers';
 import { createMiniProgram, MiniProgram } from './miniProgram';
 import { devServerOptions, WxaServerOptions } from './server';
 
-export type { MiniProgram, MockHandler, RouteHandler } from './miniProgram';
+export type { MiniProgram, MockHandler, RouteHandler, WebViewCookie } from './miniProgram';
 export type { MiniProgramRequest } from './request';
 export type { WxaServerOptions } from './server';
 

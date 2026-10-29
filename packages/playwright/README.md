@@ -37,6 +37,7 @@ test('提交订单后跳转到结果页', async ({ miniProgram }) => {
 
 - `miniProgram` 的每个成员都有类型注释，编辑器里悬停就能看到说明
 - `mock`、`route` 可以传 Node 里的函数，能用用例里的变量、检查参数；函数抛错时用例失败
+- `setWebViewCookies` 在 web-view 首次请求前注入跨域、httpOnly Cookie
 - 用例结束时检查运行时错误和未实现的 wx API，`wxaCheckErrors: false` 可以关掉
 - 每个 worker 一个开发服务器，每个用例一个新的浏览器上下文，并行运行互不影响
 
