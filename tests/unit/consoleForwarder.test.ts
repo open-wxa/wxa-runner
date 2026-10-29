@@ -54,6 +54,21 @@ describe('ConsoleForwarder', () => {
     ]);
   });
 
+  it('有提示时附在报错的栈后面，每条一行', () => {
+    const sent: ConsoleReport[] = [];
+    const forwarder = new ConsoleForwarder('errors', report => sent.push(report), () => undefined, kind =>
+      kind === 'service' ? ['出错时首页还没创建', '第二条提示'] : []
+    );
+    const message = "Cannot read properties of undefined (reading 'route')";
+    forwarder.error('service', 0, message, `TypeError: ${message}\n${frame('success', 'app.js', 7)}`);
+    forwarder.error('webview', 1, message);
+
+    expect(sent.map(report => report.text)).toEqual([
+      `逻辑层报错：${message}\n    at success (app.js:7:5)\n  提示：出错时首页还没创建\n  提示：第二条提示`,
+      `渲染层报错：${message}`
+    ]);
+  });
+
   it('参数很多时整条消息也有长度上限，不会超出开发服务器接收的大小', () => {
     const { forwarder, sent } = createForwarder();
     forwarder.console('service', 0, 'warn', Array.from({ length: 100 }, () => '长'.repeat(1000)));

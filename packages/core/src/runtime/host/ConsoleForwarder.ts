@@ -29,18 +29,23 @@ const MODULE_URL = /\bhttps?:\/\/[^/\s]+\/__wxa__\/module\/([^?\s)]+?)(?:\?[^:\s
 export class ConsoleForwarder {
   private readonly recentErrors = new Map<string, number>();
 
-  /** @param pageOf 出错的页面路径，不知道时返回 undefined */
+  /**
+   * @param pageOf 出错的页面路径，不知道时返回 undefined
+   * @param hintsOf 附在报错后面的提示，帮开发者认出 wxa-runner 和真机不同造成的错误
+   */
   constructor(
     readonly mode: ForwardConsole,
     private readonly send: (report: ConsoleReport) => void,
-    private readonly pageOf: (kind: FrameKind, webviewId: number) => string | undefined
+    private readonly pageOf: (kind: FrameKind, webviewId: number) => string | undefined,
+    private readonly hintsOf: (kind: FrameKind) => string[] = () => []
   ) {}
 
   /** 运行时错误：全局 error、未处理的 Promise 拒绝、基础库捕获的业务代码错误 */
   error(kind: FrameKind, webviewId: number, message: string, stack?: string) {
     const frames = businessFrames(stack);
     if (!this.mode || this.isRepeated(`${kind}:${webviewId}:${message}\n${frames}`)) return;
-    this.post('error', `${this.origin(kind, webviewId)}报错：${message}${frames ? `\n${frames}` : ''}`);
+    const hints = this.hintsOf(kind).map(hint => `\n  提示：${hint}`).join('');
+    this.post('error', `${this.origin(kind, webviewId)}报错：${message}${frames ? `\n${frames}` : ''}${hints}`);
   }
 
   /** 运行时自己的提醒，如调用了未实现的 wx API */

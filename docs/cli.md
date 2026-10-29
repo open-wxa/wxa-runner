@@ -64,6 +64,8 @@ wxa-runner dev . --host
     at bo.loadList (pages/index/index.js:9:23)
 ```
 
+逻辑层在首页创建前出错时（`onLaunch` 里，或启动阶段的接口回调里），报错后附一行提示：`出错时首页还没创建，getCurrentPages() 返回的是空数组`。setup 拦截的请求立即返回，回调比真机更容易早于首页执行；需要模拟网络耗时就给拦截规则加 `delay`。
+
 在编程助手（Claude Code、Codex、Cursor 等）里启动时，`console.warn` / `console.error` 也会转发。
 
 ## wxa-runner baselib

@@ -106,8 +106,11 @@ export class Host implements HostApi {
   /** @param sendReport 把报错发给开发服务器打印到终端，见 AppInfo.forwardConsole */
   constructor(readonly info: AppInfo, root: HTMLElement, sendReport: (report: ConsoleReport) => void = () => undefined) {
     this.device = info.device;
-    this.forwarder = new ConsoleForwarder(info.forwardConsole ?? false, sendReport, (kind, webviewId) =>
-      kind === 'service' ? this.currentPage()?.path : this.pages.get(webviewId)?.path
+    this.forwarder = new ConsoleForwarder(
+      info.forwardConsole ?? false,
+      sendReport,
+      (kind, webviewId) => kind === 'service' ? this.currentPage()?.path : this.pages.get(webviewId)?.path,
+      kind => this.launchHints(kind)
     );
     this.shell = new PhoneShell(root, info.device);
     this.tabPaths = new Set((info.wxConfig.tabBar?.list || []).map((item: any) => stripHtml(item.pagePath)));
@@ -281,6 +284,14 @@ export class Host implements HostApi {
     const message = `${name} 尚未实现，返回了默认成功。可以用 mock 覆盖，启动阶段就调用的要在 setup 里 mock`;
     this.errors.push({ kind: 'service', webviewId: 0, api, message });
     this.forwarder.warn(message);
+  }
+
+  /**
+   * 逻辑层在首页创建前出错时的提示：onLaunch、启动阶段的接口回调里读 getCurrentPages()[0] 是常见原因，
+   * 而报错本身只说读不到某个属性。被拦截的请求立即返回，比真机更容易在首页创建前执行回调
+   */
+  private launchHints(kind: FrameKind): string[] {
+    return kind === 'service' && !this.currentPage() ? ['出错时首页还没创建，getCurrentPages() 返回的是空数组'] : [];
   }
 
   // ---------------------------------------------------------------------------

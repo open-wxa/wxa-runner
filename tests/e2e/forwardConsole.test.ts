@@ -86,6 +86,8 @@ describe.skipIf(!e2eReady)('报错转发到终端（forwardConsole: errors）', 
     expect(text).toMatch(/pages\/index\/index\.js:6:\d+/);
     expect(text).not.toContain('__baselib__');
     expect(text).not.toContain('http://');
+    // 首页创建后的报错不带启动阶段的提示
+    expect(text).not.toContain('提示：');
   });
 
   it('事件处理函数里抛出的错误打印到终端', async () => {
@@ -162,5 +164,31 @@ describe.skipIf(!e2eReady)('不转发（作为库使用时的默认值）', () =
     await vi.waitFor(async () => expect(await terminal.runner.page.evaluate(() => window.__wxa_test_api__.errors().length)).toBeGreaterThan(0));
     await sleep(500);
     expect(terminal.output).toEqual([]);
+  });
+});
+
+describe.skipIf(!e2eReady)('首页创建前出错', () => {
+  it('onLaunch 里读首页时，报错后提示首页还没创建、getCurrentPages() 是空数组', async () => {
+    const output: Terminal['output'] = [];
+    const runner = await startRunner(
+      {
+        'app.json': { pages: ['pages/index/index'] },
+        'app.js': 'App({ onLaunch() { console.log(getCurrentPages()[0].route); } });',
+        'pages/index/index.json': {},
+        'pages/index/index.wxml': '<view>首页</view>',
+        'pages/index/index.js': 'Page({});'
+      },
+      {
+        forwardConsole: 'errors',
+        logger: { log: () => undefined, warn: () => undefined, error: (text: string) => output.push({ level: 'error', text }) }
+      }
+    );
+    try {
+      await runner.open('/');
+      await vi.waitFor(() => expect(output.filter(line => line.text.includes("reading 'route'"))).toHaveLength(1));
+      expect(output[0].text).toContain('\n  提示：出错时首页还没创建，getCurrentPages() 返回的是空数组');
+    } finally {
+      await runner.close();
+    }
   });
 });
