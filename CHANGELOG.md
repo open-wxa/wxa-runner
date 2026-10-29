@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.11.0](https://github.com/open-wxa/wxa-runner/compare/v0.10.1...v0.11.0) (2026-10-29)
+
+
+### 新功能
+
+* 新增 wxapack 查看器包，core 开放不依赖 Node 的 /web 入口 ([#89](https://github.com/open-wxa/wxa-runner/issues/89)) ([9a09d3c](https://github.com/open-wxa/wxa-runner/commit/9a09d3ca8411527ab57741c575540089af08b3f4))
+
 ## [0.10.1](https://github.com/open-wxa/wxa-runner/compare/v0.10.0...v0.10.1) (2026-10-29)
 
 
