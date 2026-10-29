@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.10.1](https://github.com/open-wxa/wxa-runner/compare/v0.10.0...v0.10.1) (2026-10-29)
+
+
+### 问题修复
+
+* 逻辑层在首页创建前报错时，提示 getCurrentPages() 是空数组 ([#90](https://github.com/open-wxa/wxa-runner/issues/90)) ([f43c003](https://github.com/open-wxa/wxa-runner/commit/f43c0039e96d4a6a84c781a27b1c30d6062ef11a))
+
 ## [0.10.0](https://github.com/open-wxa/wxa-runner/compare/v0.9.0...v0.10.0) (2026-10-28)
 
 
