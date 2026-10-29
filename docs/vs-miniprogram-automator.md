@@ -6,15 +6,10 @@ description: 微信小程序自动化测试的两种方案：官方的 miniprogr
 
 # wxa-runner 与 miniprogram-automator 对比
 
-[miniprogram-automator](https://developers.weixin.qq.com/miniprogram/dev/devtools/auto/) 是微信官方的小程序自动化 SDK：用 Node.js 脚本控制微信开发者工具，
-也能通过真机调试控制手机，跳转页面、读取页面 data、点击元素、mock `wx` 上的方法。
+[miniprogram-automator](https://developers.weixin.qq.com/miniprogram/dev/devtools/auto/) 是微信官方的小程序自动化 SDK，用 Node.js 脚本控制开发者工具的模拟器或真机，要有装了开发者工具的 Windows 或 macOS 机器。
+wxa-runner 不控制开发者工具，在 Chrome 里用官方基础库运行小程序，测试用 Playwright 写，Linux CI 上不需要开发者工具，但不支持真机。
 
-wxa-runner 不控制开发者工具，而是在普通的 Chrome 里用官方基础库运行小程序，测试直接用 Playwright 写。
-
-两者都能写小程序的 E2E 测试，适用的场景不同，也可以一起用。
-
-- **miniprogram-automator**：在开发者工具的模拟器或真机上运行，要有装了开发者工具的 Windows 或 macOS 机器
-- **wxa-runner**：在浏览器里运行，可以无头运行，Linux CI 上不需要开发者工具；不支持真机
+两者适用的场景不同，也可以一起用。
 
 ## 对比
 

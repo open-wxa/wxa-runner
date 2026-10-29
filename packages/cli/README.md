@@ -1,6 +1,6 @@
 # wxa-runner
 
-在普通浏览器里，用**微信官方基础库**运行小程序。为本地调试和 E2E 自动化测试而生。
+在普通浏览器里，用**微信官方基础库**运行小程序。用于本地调试和 E2E 自动化测试。
 
 ```bash
 npx wxa-runner dev ./dist/dev/mp-weixin   # 原生小程序目录，或 uni-app / Taro 编译产物

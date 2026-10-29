@@ -19,6 +19,9 @@ hero:
       text: 在 Playwright 中测试
       link: /testing
     - theme: alt
+      text: 在线预览
+      link: https://wxa-viewer.picfinder.workers.dev
+    - theme: alt
       text: GitHub
       link: https://github.com/open-wxa/wxa-runner
 
@@ -63,3 +66,4 @@ npx wxa-runner dev ./dist/dev/mp-weixin   # 原生小程序目录，或 uni-app 
 - [给 uni-app 项目写 E2E 测试](./uni-app.md)：运行 `mp-weixin` 编译产物，源码改动后热更新
 - [跳过登录、mock 原生 API 和 wx.request](./setup.md)：不用改业务代码
 - [和 miniprogram-automator 怎么选](./vs-miniprogram-automator.md)：两种小程序自动化测试方案的区别
+- [不带源码，发链接给别人看小程序](./viewer.md)：打包成 `.wxapack`，导出成静态站点部署，比如这个[在线预览](https://wxa-viewer.picfinder.workers.dev)

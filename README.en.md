@@ -2,12 +2,17 @@
 
 > Run WeChat Mini Programs in a regular browser on the **official base library**. Built for local debugging and end-to-end testing.
 
-English · [中文](./README.md)
+**[Docs (in Chinese)](https://open-wxa.github.io/wxa-runner/)** · [Live demo](https://wxa-viewer.picfinder.workers.dev) · English · [中文](./README.md)
 
 ```bash
 npx wxa-runner dev ./dist/dev/mp-weixin   # a native mini program, or uni-app / Taro build output
 # → http://localhost:3000
 ```
+
+[Live demo](https://wxa-viewer.picfinder.workers.dev): open a uni-app mini program in your browser, with nothing to install, and see how it renders on the web.
+It is deployed with the [viewer](https://open-wxa.github.io/wxa-runner/viewer) (in Chinese); a setup file answers every API call with mock data, so you can vote, comment and post, and a refresh resets everything.
+
+<a href="https://wxa-viewer.picfinder.workers.dev"><img src="./docs/public/viewer-demo.png" width="450" alt="Live demo: a uni-app mini program's post page running in the browser"></a>
 
 Base library 3.7.0 and below is used by default; newer versions (3.7.1 onwards) must be chosen explicitly. See [Known limitations](#known-limitations) for the rest.
 
@@ -107,6 +112,7 @@ See [docs/testing.md](./docs/testing.md) (in Chinese) for configuration, mocking
 | Media | chooseImage, chooseMedia (images and videos) and chooseVideo pick files through the browser; previewImage, getImageInfo; saving to the album downloads the image; InnerAudioContext plays audio |
 | Network | request, upload and download through a proxy (no CORS limits), WebSocket |
 | Storage | Storage, basic FileSystemManager operations |
+| Login, user info and other open APIs | Return fixed fake data; payment and code scanning fail by default ([what they return](./docs/setup.md#mock), in Chinese). Mock them in setup, or start with `--devtools-login` for a real login code. The service market `wx.serviceMarket` needs `--devtools-login` |
 
 Verified on real uni-app (Vue 3) projects; verified base library versions: 2.32.3, 3.3.4, 3.5.8, 3.7.0; the full test suite also passes on 3.7.1 and 3.8.8.
 CI covers only the bundled 3.7.0; the other versions are checked locally with `WXA_BASELIB=<version> pnpm test`.

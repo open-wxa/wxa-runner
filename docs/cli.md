@@ -1,5 +1,5 @@
 ---
-description: wxa-runner 命令行：dev 启动开发服务器的选项（端口、局域网访问、基础库版本、setup、报错转发到终端、借用开发者工具登录态），baselib 管理基础库，以及 WXA_BASELIB 等环境变量。
+description: wxa-runner 命令行：dev 启动开发服务器的选项（端口、局域网访问、基础库版本、setup、报错转发到终端、借用开发者工具登录态），baselib 管理基础库，viewer 打包和部署查看器，以及 WXA_BASELIB 等环境变量。
 ---
 
 # 命令与环境变量
@@ -9,6 +9,7 @@ description: wxa-runner 命令行：dev 启动开发服务器的选项（端口�
 | [`wxa-runner dev <项目目录>`](#wxa-runner-dev) | 启动开发服务器，在浏览器里运行小程序，改动后热更新 |
 | [`wxa-runner baselib list`](#wxa-runner-baselib) | 列出可用的基础库及兼容性 |
 | [`wxa-runner baselib extract [版本]`](#wxa-runner-baselib) | 解包基础库（`dev` 会自动执行） |
+| [`wxa-runner viewer pack` / `preview` / `export`](./viewer.md#命令) | 打包成 `.wxapack`、在本机打开查看器、导出查看器站点，见[查看器](./viewer.md)（目前只能在仓库里用） |
 
 没装成开发依赖时在前面加 `npx`，如 `npx wxa-runner dev .`。
 
@@ -40,7 +41,7 @@ wxa-runner dev <项目目录> [选项]
 # 原生小程序，启动后打开浏览器
 wxa-runner dev . --open
 
-# uni-app：先运行 uni-app 的监听构建，再启动编译产物；setup 文件放在源码目录
+# uni-app：先运行 uni-app 的监听构建，再启动编译产物；setup 文件放在源码目录（用 Vite 插件时不用手动启动）
 wxa-runner dev ./dist/dev/mp-weixin --setup ./wxa.setup.ts
 
 # 用指定的基础库版本

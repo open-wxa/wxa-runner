@@ -5,15 +5,12 @@ description: 用 Playwright 给微信小程序写 E2E 测试：安装 @open-wxa/
 
 # 用 Playwright 写微信小程序 E2E 测试
 
-用 [Playwright](https://playwright.dev/) 写小程序的 E2E 测试：在浏览器里打开小程序的页面，点击按钮，检查页面上的文字、页面的 `data`、小程序发出的请求。
-CI 里无头运行，Linux 上不需要开发者工具。
+用 [Playwright](https://playwright.dev/) 测小程序：打开页面、点击，检查页面上的文字、页面 `data` 和发出的请求。CI 里无头运行，不需要开发者工具。
 
 ## fixture 是什么
 
-fixture 是 Playwright 的概念：测试框架在每个用例开始前准备好、作为参数传进来的对象。Playwright 自带的 `page`（浏览器页面）就是一个 fixture。
-
-`@open-wxa/wxa-runner-playwright` 提供了一个叫 `miniProgram` 的 fixture。用了它，就不用自己启动 wxa-runner、打开浏览器、等小程序启动，
-用例里直接写要测的东西：
+`@open-wxa/wxa-runner-playwright` 提供一个 `miniProgram` fixture，和 Playwright 自带的 `page` 一样，在每个用例开始前准备好、作为参数传进来。
+它负责启动 wxa-runner、打开浏览器、等小程序启动，用例里只写要测的东西：
 
 ```ts
 test('点击「详情」进入详情页', async ({ miniProgram }) => {
@@ -23,7 +20,7 @@ test('点击「详情」进入详情页', async ({ miniProgram }) => {
 });
 ```
 
-不想多装一个包，或者用的不是 Playwright，可以直接调用浏览器里的[测试 API](./test-api.md)。
+不用 Playwright，或者不想多装一个包，可以直接调用浏览器里的[测试 API](./test-api.md)。
 
 ## 快速上手
 
@@ -33,7 +30,7 @@ test('点击「详情」进入详情页', async ({ miniProgram }) => {
 pnpm add -D @playwright/test @open-wxa/wxa-runner-playwright
 ```
 
-用例在本机安装的 Google Chrome 里运行。没装 Chrome 时，运行 `npx playwright install chrome`。
+用例在本机的 Google Chrome 里运行，没装时运行 `npx playwright install chrome`。
 
 **2. 新建 `playwright.config.ts`**
 
@@ -70,8 +67,7 @@ test('首页能打开', async ({ miniProgram }) => {
 });
 ```
 
-`test` 和 `expect` 要从 `@open-wxa/wxa-runner-playwright` 导入，不是 `@playwright/test`：这样用例里才有 `miniProgram`，
-`expect` 才有 `toHavePath` 等断言。
+`test` 和 `expect` 要从 `@open-wxa/wxa-runner-playwright` 导入，不是 `@playwright/test`，否则没有 `miniProgram` 和 `toHavePath` 等断言。
 
 **4. 运行**
 
@@ -83,7 +79,7 @@ npx playwright test --ui       # 图形界面，可以一步步回看
 
 ## 写用例
 
-下面是一个完整的例子：下单前 mock 登录、拦截下单接口，点击提交后检查跳转、页面 data 和发出的请求。各部分的说明见后面几节。
+一个完整的例子：mock 登录、拦截下单接口，点击提交后检查跳转、页面 data 和发出的请求。各部分见后面几节。
 
 ```ts
 import { test, expect } from '@open-wxa/wxa-runner-playwright';
@@ -123,7 +119,7 @@ test('提交订单后跳转到结果页', async ({ miniProgram }) => {
 
 ### 操作页面
 
-`miniProgram.current` 是当前页（页面栈顶），用法和 Playwright 的 `page.frameLocator()` 一样。跳转后它自动指向新页面，不用重新获取：
+`miniProgram.current` 是当前页，用法和 Playwright 的 `page.frameLocator()` 一样，跳转后自动指向新页面：
 
 ```ts
 const page = miniProgram.current;
@@ -134,7 +130,7 @@ await expect(page.locator('#count')).toHaveText('1');
 
 ### 断言
 
-除了 Playwright 自带的断言，还可以直接断言小程序的状态，不满足时自动重试，直到超时：
+除了 Playwright 自带的断言，还能断言小程序的状态，不满足时自动重试到超时：
 
 | 写法 | 检查 |
 | --- | --- |
@@ -146,7 +142,7 @@ await expect(page.locator('#count')).toHaveText('1');
 
 ### mock 原生 API、拦截请求
 
-在 `open()` 之前调用，`App.onLaunch` 里就生效；打开之后调用，从下一次调用开始生效：
+在 `open()` 之前调用，`App.onLaunch` 里就生效；之后调用，从下一次调用开始生效：
 
 ```ts
 await miniProgram.mock('getLocation', {
@@ -162,7 +158,7 @@ await miniProgram.open();
 - 写法和 setup 的 [`mock`](./setup.md#mock)、[`network.routes`](./setup.md#network) 一样，会覆盖 setup 里的同名配置
 - `unmock(api?)`、`unroute(pattern?)` 撤销，不传参数时撤销全部，包括 setup 里声明的
 
-也可以传函数，按调用参数或请求内容返回结果。函数在 Node 里执行，能用用例里的变量，也能在里面写断言：
+也可以传函数，按调用参数或请求内容返回结果。函数在 Node 里执行，能用用例里的变量，也能写断言：
 
 ```ts
 await miniProgram.route('POST **/api/orders', request => {
@@ -171,10 +167,15 @@ await miniProgram.route('POST **/api/orders', request => {
 });
 ```
 
-- 函数抛错时这次调用失败，用例结束时也会失败，写在函数里的断言失败了不会被忽略
-- 函数的结果是异步返回的。基础库同步调用的 API 只能传对象：以 `Sync` 结尾的，以及 `getSystemInfo`、`getMenuButtonBoundingClientRect`
-  （`wx.getWindowInfo` 等都经过 `getSystemInfo`）
+函数里的断言失败时，这次调用失败，用例结束时也会失败，不会被忽略。
+
+<details class="details custom-block">
+<summary>传函数时的限制</summary>
+
+- 函数的结果是异步返回的。基础库同步调用的 API 只能传对象：以 `Sync` 结尾的，以及 `getSystemInfo`、`getMenuButtonBoundingClientRect`（`wx.getWindowInfo` 等都经过 `getSystemInfo`）
 - 参数和返回值要能序列化。`route` 的函数拿到的 `request.body` 已经按 Content-Type 解析好（JSON、表单）
+
+</details>
 
 ### 检查发出的请求
 
@@ -188,9 +189,9 @@ const req = await miniProgram.waitForRequest(
 expect(req.body).toEqual({ name: '张三' });
 ```
 
-- `waitForRequest(pattern)`：等到小程序发出匹配的请求，返回最近的一个。之前已经发出的也算，只关心某个操作之后的请求时，操作前先 `clearRequests()`
-- `requests(pattern?)`：已经发出的全部请求，按发出顺序。被拦截的和真正发出的都有，只保留最近 1000 个
-- 规则的写法同 `route`
+- `waitForRequest(pattern)`：等到发出匹配的请求，返回最近的一个。之前发出的也算，所以只关心某个操作之后的请求时，操作前先 `clearRequests()`
+- `requests(pattern?)`：已发出的全部请求，按发出顺序，被拦截的和真正发出的都有，只保留最近 1000 个
+- 规则写法同 `route`
 
 每个请求有：
 
@@ -218,8 +219,8 @@ expect(req.body).toEqual({ name: '张三' });
 
 ### 选择图片
 
-`wx.chooseImage`、`wx.chooseMedia` 会打开浏览器的文件选择框。用 Playwright 的 `filechooser` 事件直接给文件，不会弹出系统窗口。
-和真机一样，相册和拍摄都可选时（默认）会先弹出「拍摄 / 从手机相册选择」菜单，要先点菜单项：
+`wx.chooseImage`、`wx.chooseMedia` 打开浏览器的文件选择框，用 Playwright 的 `filechooser` 事件直接给文件，不弹系统窗口。
+相册和拍摄都可选时（默认），和真机一样先弹出「拍摄 / 从手机相册选择」菜单，要先点菜单项：
 
 ```ts
 test('上传头像', async ({ miniProgram, page }) => {
@@ -239,12 +240,12 @@ test('上传头像', async ({ miniProgram, page }) => {
 
 ### 检查运行时错误
 
-每个用例结束时，fixture 会检查小程序有没有出错，有就让用例失败：
+每个用例结束时，fixture 检查小程序有没有出错，有就让用例失败：
 
 - 逻辑层、渲染层的运行时错误
-- 调用了 wxa-runner 还没有实现的 `wx` API。这些 API 会返回成功，以免打断业务代码，但测试里要 mock 掉
+- 调用了还没实现的 `wx` API。它们返回成功以免打断业务代码，测试里要 mock 掉
 
-用 `miniProgram.errors()` 可以看到具体内容。有意触发错误的用例，用 `test.use({ wxaCheckErrors: false })` 关掉检查。
+`miniProgram.errors()` 能看到具体内容。有意触发错误的用例，用 `test.use({ wxaCheckErrors: false })` 关掉检查。
 
 ## 配置项
 
@@ -256,14 +257,20 @@ test('上传头像', async ({ miniProgram, page }) => {
 | `wxaServerOptions` | `{}` | 开发服务器的其他参数，如 `setup`、`baseLibVersion`、`devtoolsLogin`。路径相对配置文件 |
 | `wxaCheckErrors` | `true` | 用例结束时[检查运行时错误](#检查运行时错误) |
 
-- 每个 worker（Playwright 并行运行用例的进程）启动一个开发服务器，小程序只编译一次；每个用例用一个新的浏览器上下文，Storage、用户文件、临时文件和页面栈互不影响
-- 文件在开发服务器内存中按浏览器会话隔离。会话标识保存在 localStorage；同一上下文的页面和刷新复用文件，新的上下文得到独立目录。关闭浏览器上下文不会立即清理服务器文件，开发服务器关闭时全部释放；重启服务器后文件不保留
-- 文件接口保持同步和异步语义：只有 `Sync` 接口使用同步 XHR，其他文件接口用异步请求
+- 每个 worker（Playwright 并行运行用例的进程）启动一个开发服务器，小程序只编译一次；每个用例用新的浏览器上下文，Storage、文件和页面栈互不影响
 - 测试时不监听文件变化、不热更新，运行环境和真机一致
-- `wxaProject`、`wxaServerOptions` 只能写在配置文件里，或用例文件顶层的 `test.use` 里，不能写在 `describe` 里
+- `wxaProject`、`wxaServerOptions` 只能写在配置文件或用例文件顶层的 `test.use` 里，不能写在 `describe` 里
+
+<details class="details custom-block">
+<summary>小程序写入的文件存在哪</summary>
+
+存在开发服务器的内存里，按浏览器会话隔离，会话标识存在 localStorage 里：同一个上下文里的页面和刷新共用这些文件，新的上下文是独立的目录。
+关掉浏览器上下文时服务器上的文件不会马上清理，开发服务器关闭时全部释放，重启后不保留。
+文件接口的同步、异步和真机一致：只有 `Sync` 结尾的接口用同步 XHR，其他都是异步请求。
+
+</details>
 
 ## 注意事项
 
 - **跳转后的选择器**：新旧页面有同一个选择器时，先 `await expect(miniProgram).toHavePath(...)` 等跳转完成，免得断言落在上一个页面上
-- **text 组件的文字**：基础库 3.3.x 及更早的版本里，`textContent`（Playwright 的 `toHaveText` 默认用它）会把 text 组件的文字读到两遍。
-  用 `toHaveText(text, { useInnerText: true })` 或 `innerText()`
+- **text 组件的文字**：基础库 3.3.x 及更早的版本里，`textContent`（`toHaveText` 默认用它）会把 text 组件的文字读两遍，改用 `toHaveText(text, { useInnerText: true })` 或 `innerText()`

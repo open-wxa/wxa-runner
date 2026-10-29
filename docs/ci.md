@@ -6,10 +6,8 @@ description: 不装微信开发者工具，在 GitHub Actions 的 Linux 机器�
 
 # 在 CI 里跑小程序 E2E 测试
 
-微信开发者工具只有 Windows、macOS 版。靠它跑自动化测试时，CI 要准备一台装好开发者工具的机器。
-
-wxa-runner 在浏览器里运行小程序。没有开发者工具时，它用随依赖安装的内置基础库 3.7.0，和微信官方 npm 包 `miniprogram-compiler` 里的编译器，
-在 GitHub Actions 的 Linux 机器上就能无头运行。wxa-runner 自己的测试也是这样在 CI 里跑的。
+微信开发者工具只有 Windows、macOS 版，靠它跑自动化测试，CI 要准备一台装好开发者工具的机器。
+wxa-runner 不需要：它用随依赖安装的内置基础库 3.7.0 和微信官方 npm 包 `miniprogram-compiler` 里的编译器，在 GitHub Actions 的 Linux 机器上无头运行。wxa-runner 自己的测试也这样跑。
 
 ## 准备
 
@@ -85,11 +83,10 @@ GitLab CI、Jenkins 等也可以，机器要满足：
 
 **启动时提示找不到基础库**：内置基础库是可选依赖，安装失败时不会报错。重新安装依赖，确认 `node_modules` 里有 `@open-wxa/wxa-baselib`。
 
-**本地通过，CI 上失败**：本地装了开发者工具时，用的是它下载过的基础库和它自带的编译器，和 CI 不同。
-本地先用和 CI 一样的基础库版本跑一遍：
+**本地通过，CI 上失败**：本地装了开发者工具时，用的是它的基础库和编译器，和 CI 不同。先在本地用和 CI 一样的基础库跑一遍：
 
 ```bash
 WXA_BASELIB=3.7.0 npx playwright test
 ```
 
-仍然只在 CI 上失败时，多半是上面列出的编译器差异，或者 CI 上的网络环境不同：没有被 mock 的请求在 CI 上真的会发出去。
+仍然只在 CI 上失败，多半是上面的编译器差异，或者网络环境不同：没被 mock 的请求在 CI 上真的会发出去。
