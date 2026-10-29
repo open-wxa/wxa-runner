@@ -6,7 +6,7 @@ description: wxa-runner 和微信开发者工具的区别，支持的项目类�
 
 ## 和微信开发者工具的区别
 
-wxa-runner 用的是和开发者工具同一套官方基础库，渲染、组件、生命周期的行为一致。区别在运行的地方和用途：
+两者用同一套官方基础库，渲染、组件、生命周期的行为一致，区别在运行的地方和用途：
 
 | | wxa-runner | 微信开发者工具 |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ wxa-runner 用的是和开发者工具同一套官方基础库，渲染、组件
 | 预览、上传、真机调试 | 不支持 | 支持 |
 | 插件 | 支持插件页面，要加 [`--devtools-login`](./devtools-login.md#插件) | 支持 |
 
-适合本地开发调试、跑自动化测试；发布相关的事情仍然在开发者工具里做。
+wxa-runner 用来本地调试和跑自动化测试，发布相关的事仍然在开发者工具里做。
 
 ## 支持的项目
 
@@ -47,29 +47,26 @@ wxa-runner 用的是和开发者工具同一套官方基础库，渲染、组件
 
 ## less / sass
 
-`project.config.json` 里开启了编译插件时（如 `"useCompilerPlugins": ["less"]`），按开发者工具的规则把 `.less` / `.scss` / `.sass` 编译成同名的 WXSS：
+`project.config.json` 开启编译插件时（如 `"useCompilerPlugins": ["less"]`），按开发者工具的规则把 `.less` / `.scss` / `.sass` 编译成同名的 WXSS：
 
-- 开箱即用，和开发者工具一样不用另装编译器：项目里安装了 `less` / `sass` 时用项目里的版本，没装时用 wxa-runner 自带的（less 4、sass 1.99）
-- 同一路径既有 `.less`（或 `.scss` / `.sass`）又有 `.wxss` 时用预处理文件的编译结果，`.wxss` 不生效
-- 每个 `.less` 自动引用小程序根目录的 `app.less`，能直接用里面的变量和 mixin（可以用 `setting.lessSetting.commonUseFilePath` 换成别的文件）；
-  `.scss` / `.sass` 自动 `@use` 根目录的 `global.scss` 或 `global.sass`，通过 `global.$变量` 使用
+- 不用另装编译器：项目里装了 `less` / `sass` 时用项目里的，没装时用 wxa-runner 自带的（less 4、sass 1.99）
+- 同一路径同时有 `.less`（或 `.scss` / `.sass`）和 `.wxss` 时，用预处理文件，`.wxss` 不生效
+- 每个 `.less` 自动引用根目录的 `app.less`，能直接用里面的变量和 mixin（用 `setting.lessSetting.commonUseFilePath` 换成别的文件）；
+  `.scss` / `.sass` 自动 `@use` 根目录的 `global.scss` 或 `global.sass`，用 `global.$变量` 访问
 - `["less", { "globalVars": { ... } }]` 给出的全局变量在每个 `.less` 里都能用
 - `@import "x.wxss";` 原样保留，交给 WXSS 编译器处理
-- 开发中修改 `useCompilerPlugins` 等设置后重新编译，不用重启
+- 开发中改了 `useCompilerPlugins` 等设置会重新编译，不用重启
 
-没有开启编译插件时，`.less` / `.scss` 文件不会生效（开发者工具也一样），启动时会在终端提示。
+没开启编译插件时，`.less` / `.scss` 不生效（开发者工具也一样），启动时终端会提示。
 
 ## 已知限制
 
-- **基础库版本**：3.7.1 起的基础库不会自动选用，要用 `--baselib` 或 `WXA_BASELIB` 指定，启动时提示超出已验证的范围。
-  内置基础库只有 3.7.0，更新的版本要先在开发者工具里下载
-- **未实现的 API**：还没有实现的原生 API 调用后返回成功，以免打断业务代码。测试里会被发现，见[检查运行时错误](./testing.md#检查运行时错误)
+- **基础库版本**：3.7.1 起不会自动选用，要用 `--baselib` 或 `WXA_BASELIB` 指定，启动时提示超出已验证的范围。内置的只有 3.7.0，更新的版本先在开发者工具里下载
+- **未实现的 API**：调用后返回成功，以免打断业务代码；测试里会被发现，见[检查运行时错误](./testing.md#检查运行时错误)
 - **设备能力**：不支持蓝牙等设备能力
-- **TypeScript 编译插件**：`useCompilerPlugins` 里的 `typescript` 不支持，`.ts` 文件不会被加载，要先编译成 `.js`
-- **地图**：MapContext 的 toScreenLocation、fromScreenLocation、地面覆盖物等方法在基础库的网页实现里没有，调用后不会回调
-  （详见[设计文档](https://github.com/open-wxa/wxa-runner/blob/main/PROJECT_DESIGN.md#原生组件)）
+- **TypeScript 编译插件**：不支持 `useCompilerPlugins` 里的 `typescript`，`.ts` 文件要先编译成 `.js`
+- **地图**：MapContext 的 toScreenLocation、fromScreenLocation、地面覆盖物等方法基础库的网页实现里没有，调用后不会回调（[设计文档](https://github.com/open-wxa/wxa-runner/blob/main/PROJECT_DESIGN.md#原生组件)）
 - **插件**：只支持插件页面，要加 `--devtools-login`；插件的自定义组件和 `requirePlugin` 暂不支持（[#56](https://github.com/open-wxa/wxa-runner/issues/56)）
-- **Worker 里的接口**：只能用异步接口，如 FileSystemManager 的 readFile、writeFile。同步接口（readFileSync 等）调用时报错；
-  request、downloadFile、uploadFile、connectSocket 也不能用，基础库要同步拿到它们的任务编号。Worker 和页面之间只能异步通信，
-  同步等结果要求整个页面跨源隔离，跨域的图片等资源会因此加载不了
+- **Worker 里的接口**：只能用异步接口（如 FileSystemManager 的 readFile、writeFile），同步接口调用时报错；request、downloadFile、uploadFile、connectSocket 也不能用。
+  因为基础库要同步拿到它们的任务编号，而 Worker 和页面之间只能异步通信：同步等待要求整个页面跨源隔离，跨域的图片等资源会因此加载不了
 - **没有开发者工具时**（如 Linux、CI）：只支持 x86-64；编译器版本较旧，模板运行时有少量差异（如单页最多 16000 个节点）；地区选择器不可用

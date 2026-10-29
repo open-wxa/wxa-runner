@@ -121,12 +121,14 @@ export default defineConfig({
     logo: { light: '/logo.png', dark: '/logo-dark.png', alt: 'wxa-runner' },
 
     nav: [
+      // 和侧边栏的分组对应：指南 = 开始 + 开发调试
       {
         text: '指南',
         link: '/getting-started',
-        activeMatch: '^/(getting-started|features|vs-miniprogram-automator|uni-app|setup|devtools-login|real-login|hot-reload|cli|faq)$'
+        activeMatch: '^/(getting-started|features|vs-miniprogram-automator|setup|devtools-login|real-login|hot-reload|viewer)$'
       },
-      { text: '测试', link: '/testing', activeMatch: '^/(testing|ci|test-api)$' },
+      { text: '测试', link: '/testing', activeMatch: '^/(testing|uni-app|ci|test-api)$' },
+      { text: '参考', link: '/cli', activeMatch: '^/(cli|faq)$' },
       {
         text: `v${pkg.version}`,
         items: [
@@ -147,21 +149,27 @@ export default defineConfig({
         ]
       },
       {
-        text: '使用',
+        text: '开发调试',
         items: [
           { text: '启动前准备（setup）', link: '/setup' },
           { text: '借用开发者工具登录态', link: '/devtools-login' },
           { text: '热更新', link: '/hot-reload' },
+          { text: '查看器', link: '/viewer' }
+        ]
+      },
+      {
+        text: '测试',
+        items: [
           { text: '在 Playwright 中测试', link: '/testing' },
+          { text: 'uni-app 项目', link: '/uni-app' },
           { text: '在 CI 中运行', link: '/ci' },
-          { text: 'uni-app 项目', link: '/uni-app' }
+          { text: '测试 API', link: '/test-api' }
         ]
       },
       {
         text: '参考',
         items: [
           { text: '命令与环境变量', link: '/cli' },
-          { text: '测试 API', link: '/test-api' },
           { text: '常见问题', link: '/faq' }
         ]
       }
