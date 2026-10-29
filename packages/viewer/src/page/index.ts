@@ -10,7 +10,7 @@ import type { PackManifest } from '../pack/format';
 import { deleteProject, getActiveProjectId, listProjects, putProject, setActiveProjectId, ViewerProject } from '../store';
 import { compileSetup } from './compileSetup';
 import { h, icon } from './dom';
-import { downloadPacks, importProject, parseEnv } from './projects';
+import { downloadPacks, importProject, importProjects, parseEnv, withDefaultPacks } from './projects';
 import ICON_URL from './assets/icon.png';
 import LOGO_URL from './assets/logo.png';
 import { VIEWER_CSS } from './styles';
@@ -68,6 +68,7 @@ async function main() {
   let projects: ViewerProject[] = [];
   let activeId: string | null = null;
   let viewerBaseLib = '';
+  let defaultPacks: string[] = [];
   let ready = false;
   let busy = false;
   let menuOpen = false;
@@ -664,7 +665,9 @@ async function main() {
     await reload();
     const response = await fetch('/viewer.json');
     if (!response.ok) throw new Error(`读取查看器配置失败：HTTP ${response.status}`);
-    viewerBaseLib = (await response.json()).baseLibVersion;
+    const config = await response.json();
+    viewerBaseLib = config.baseLibVersion;
+    if (Array.isArray(config.defaultPacks)) defaultPacks = config.defaultPacks;
     await takeControl();
     ready = true;
   } catch (error) {
@@ -673,15 +676,13 @@ async function main() {
     return;
   }
   await perform(async () => {
-    const download = await downloadPacks(location.href);
+    const download = await downloadPacks(withDefaultPacks(location.href, defaultPacks, projects.length > 0));
     if (download) {
-      // 依次导入，最后一个成为当前项目；同名同 appid 的旧项目只换包，保留它的 setup 和变量
-      for (const { bytes, filename } of download.packs) {
-        const project = importProject(bytes, filename, projects, true);
-        await putProject(project);
-        await setActiveProjectId(project.id);
-        projects = await listProjects();
-      }
+      // 先校验整批再保存，最后一个成为当前项目；同名同 appid 的旧项目只换包，保留它的 setup 和变量
+      const imported = importProjects(download.packs, projects);
+      for (const project of imported) await putProject(project);
+      await setActiveProjectId(imported[imported.length - 1].id);
+      projects = await listProjects();
       history.replaceState(history.state, '', download.cleanURL);
     }
   });

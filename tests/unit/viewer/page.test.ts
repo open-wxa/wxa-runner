@@ -1,7 +1,7 @@
 import { createRequire } from 'module';
 import { describe, expect, it, vi } from 'vitest';
 import { compileSetup } from '../../../packages/viewer/src/page/compileSetup';
-import { downloadPacks, importProject, parseEnv } from '../../../packages/viewer/src/page/projects';
+import { downloadPacks, importProject, importProjects, parseEnv, withDefaultPacks } from '../../../packages/viewer/src/page/projects';
 
 const coreRequire = createRequire(new URL('../../../packages/core/package.json', import.meta.url));
 const { build } = coreRequire('esbuild');
@@ -99,6 +99,28 @@ describe('查看器项目导入', () => {
     const fetcher = vi.fn();
     await expect(downloadPacks(`https://viewer.test/?pack=${encodeURIComponent(url)}`, fetcher)).rejects.toThrow('同源');
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('第一次打开站点（浏览器里没有项目、地址栏不带 pack）时下载站点的默认包，地址栏保持原样', async () => {
+    const fetcher = vi.fn(async (_url: RequestInfo | URL) => new Response(new Uint8Array(pack())));
+    const result = await downloadPacks(withDefaultPacks('https://viewer.test/?theme=dark', ['/__wxa__/preload/showcase.wxapack'], false), fetcher);
+    expect(result!.packs.map(item => item.filename)).toEqual(['showcase.wxapack']);
+    expect(result!.cleanURL).toBe('https://viewer.test/?theme=dark');
+  });
+
+  it('浏览器里已经有项目，或地址栏指定了 pack 时，不导入默认包', async () => {
+    const defaults = ['/__wxa__/preload/showcase.wxapack'];
+    expect(await downloadPacks(withDefaultPacks('https://viewer.test/', defaults, true), vi.fn())).toBeNull();
+    const fetcher = vi.fn(async (_url: RequestInfo | URL) => new Response(new Uint8Array(pack())));
+    const result = await downloadPacks(withDefaultPacks('https://viewer.test/?pack=/__wxa__/preload/mine.wxapack', defaults, false), fetcher);
+    expect(result!.packs.map(item => item.filename)).toEqual(['mine.wxapack']);
+  });
+
+  it('一批包里有坏包时整批都不导入，修好后刷新还会重试', () => {
+    const packs = [{ filename: 'a.wxapack', bytes: pack('wxa') }, { filename: 'b.wxapack', bytes: strToU8('broken') }];
+    expect(() => importProjects(packs, [])).toThrow();
+    const fixed = importProjects([packs[0], { filename: 'b.wxapack', bytes: pack('wxb') }], []);
+    expect(fixed.map(project => project.appid)).toEqual(['wxa', 'wxb']);
   });
 
   it('地址栏不带 pack 时不下载，下载失败时返回原因', async () => {

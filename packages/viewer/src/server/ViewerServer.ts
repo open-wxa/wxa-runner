@@ -4,14 +4,12 @@
  * 小程序的页面和代码由浏览器里的 Service Worker 从导入的包里应答（runtime/packRoutes.ts），这里不编译、不读项目。
  */
 
-import fs from 'fs';
 import http from 'http';
 import os from 'os';
-import path from 'path';
 import express from 'express';
 import { handleProxy, listen, LOCAL_HOST_OF_ANY_ADDRESS } from '@open-wxa/wxa-runner-core';
 import { PROXY_PREFIX } from '@open-wxa/wxa-runner-core/web';
-import { resolveViewerSite, viewerIndexHtml, ViewerSiteOptions } from './viewerSite';
+import { preloadURL, PRELOAD_PATH, resolvePackFiles, resolveViewerSite, viewerIndexHtml, ViewerSiteOptions } from './viewerSite';
 
 export interface ViewerServerOptions extends ViewerSiteOptions {
   /** 不传时从 3000 起找空闲端口；0 使用随机端口；指定的端口被占用时失败。 */
@@ -27,21 +25,14 @@ export interface ViewerServerOptions extends ViewerSiteOptions {
 export class ViewerServer {
   private readonly site;
   readonly baseLib;
-  private readonly packs = new Map<string, string>();
+  private readonly packs;
   private server: http.Server | null = null;
   private address = '';
 
   constructor(private readonly options: ViewerServerOptions = {}) {
     this.site = resolveViewerSite(options);
     this.baseLib = this.site.baseLib;
-    for (const file of options.packs ?? []) {
-      const resolved = path.resolve(file);
-      if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) throw new Error(`找不到 wxapack 文件：${resolved}`);
-      if (path.extname(resolved).toLowerCase() !== '.wxapack') throw new Error(`不是 .wxapack 文件：${resolved}`);
-      const name = path.basename(resolved);
-      if (this.packs.has(name)) throw new Error(`不能同时预加载同名包：${name}`);
-      this.packs.set(name, resolved);
-    }
+    this.packs = resolvePackFiles(options.packs);
     if (!this.baseLib.compatible)
       (options.logger ?? console).warn(`[wxa-viewer] 基础库 ${this.baseLib.version} 高于已验证的版本范围，可能无法正常运行`);
   }
@@ -77,7 +68,7 @@ export class ViewerServer {
     }
     app.use('/__baselib__', express.static(this.baseLib.dir, { index: false, redirect: false }));
     app.use(PROXY_PREFIX, express.raw({ type: () => true, limit: '50mb' }), handleProxy);
-    app.get('/__wxa__/preload/:name', (req, res, next) => {
+    app.get(PRELOAD_PATH + ':name', (req, res, next) => {
       const file = this.packs.get(req.params.name);
       if (!file) return next();
       res.type('application/octet-stream').sendFile(file);
@@ -91,7 +82,7 @@ export class ViewerServer {
     this.server = server;
     const localHost = LOCAL_HOST_OF_ANY_ADDRESS.get(host) ?? host;
     const url = new URL(`http://${localHost.includes(':') ? `[${localHost}]` : localHost}:${port}`);
-    for (const name of this.packs.keys()) url.searchParams.append('pack', '/__wxa__/preload/' + encodeURIComponent(name));
+    for (const name of this.packs.keys()) url.searchParams.append('pack', preloadURL(name));
     this.address = this.packs.size ? url.href : url.origin;
     return this.address;
   }

@@ -167,13 +167,15 @@ viewer
   .description('导出查看器：纯静态站点 site/，和转发 wx.request 的处理函数 proxy.mjs')
   .option('-b, --baselib <version>', '基础库版本（默认使用本机已安装的最新兼容版本）')
   .option('--force', '输出目录不为空时也写入，覆盖之前导出的文件')
+  .option('--pack <file>', '默认包，可以写多次：浏览器里还没有项目时自动导入', (file, packs) => packs.concat(file), [])
   .action(async (outDir, options) => {
     try {
       const { exportViewer } = loadViewer();
-      const output = exportViewer(outDir, { baseLibVersion: options.baselib, force: options.force });
+      const output = exportViewer(outDir, { baseLibVersion: options.baselib, force: options.force, packs: options.pack });
       console.log('');
       console.log(chalk.green('  查看器已导出'));
       console.log(`  静态站点  ${chalk.cyan(path.join(output, 'site'))}`);
+      options.pack.forEach((file, i) => console.log(`  ${i === 0 ? '默认包' : '      '}    ${path.basename(file)}`));
       console.log(`  请求转发  ${chalk.cyan(path.join(output, 'proxy.mjs'))}`);
       console.log('  下一步    把 site/ 交给任意静态托管；要转发 wx.request 时，把 /__wxa__/proxy/ 开头的请求交给 proxy.mjs');
       console.log('');

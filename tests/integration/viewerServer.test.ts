@@ -163,6 +163,38 @@ describe.skipIf(!ready)('查看器导出', () => {
     expect(proxy.PROXY_PATH).toBe('/__wxa__/proxy/');
   });
 
+  it('导出时带上默认包：包放进站点，viewer.json 列出它们的地址，供首次打开时导入', () => {
+    const root = temp({ 'showcase.wxapack': 'showcase-bytes', '演示 包.wxapack': 'demo-bytes' });
+    const out = path.join(root, 'export');
+    exportViewer(out, { packs: [path.join(root, 'showcase.wxapack'), path.join(root, '演示 包.wxapack')] });
+    expect(fs.readFileSync(path.join(out, 'site/__wxa__/preload/showcase.wxapack'), 'utf8')).toBe('showcase-bytes');
+    expect(fs.readFileSync(path.join(out, 'site/__wxa__/preload/演示 包.wxapack'), 'utf8')).toBe('demo-bytes');
+    expect(JSON.parse(fs.readFileSync(path.join(out, 'site/viewer.json'), 'utf8')).defaultPacks).toEqual([
+      '/__wxa__/preload/showcase.wxapack',
+      '/__wxa__/preload/%E6%BC%94%E7%A4%BA%20%E5%8C%85.wxapack'
+    ]);
+  });
+
+  it('默认包不存在、不是 .wxapack 或重名时导出失败，不动输出目录', () => {
+    const root = temp({ 'a.wxapack': 'a', 'b/a.wxapack': 'b', 'notes.txt': 'x', 'export/site/index.html': 'existing' });
+    const out = path.join(root, 'export');
+    expect(() => exportViewer(out, { force: true, packs: [path.join(root, 'missing.wxapack')] })).toThrow(/找不到/);
+    expect(() => exportViewer(out, { force: true, packs: [path.join(root, 'notes.txt')] })).toThrow(/不是 .wxapack/);
+    expect(() => exportViewer(out, { force: true, packs: [path.join(root, 'a.wxapack'), path.join(root, 'b/a.wxapack')] })).toThrow(/同名/);
+    expect(fs.readFileSync(path.join(out, 'site/index.html'), 'utf8')).toBe('existing');
+  });
+
+  it('默认包经符号链接指向要覆盖的 site/ 时导出失败，不删除包', () => {
+    const root = temp({ 'export/site/demo.wxapack': 'demo-bytes' });
+    const out = path.join(root, 'export');
+    fs.mkdirSync(path.join(root, 'packs'));
+    fs.symlinkSync(path.join(out, 'site/demo.wxapack'), path.join(root, 'packs/demo.wxapack'));
+    fs.symlinkSync(path.join(out, 'site'), path.join(root, 'packs/site-link'));
+    expect(() => exportViewer(out, { force: true, packs: [path.join(root, 'packs/demo.wxapack')] })).toThrow(/不能包含/);
+    expect(() => exportViewer(out, { force: true, packs: [path.join(root, 'packs/site-link/demo.wxapack')] })).toThrow(/不能包含/);
+    expect(fs.readFileSync(path.join(out, 'site/demo.wxapack'), 'utf8')).toBe('demo-bytes');
+  });
+
   it('导出到非空目录时被拒绝，force 才覆盖导出的文件，目录里的其他文件不动', () => {
     const root = temp({ 'site/index.html': 'existing', 'notes.txt': 'keep' });
     expect(() => exportViewer(root)).toThrow(/非空/);

@@ -65,6 +65,25 @@ export async function downloadPacks(
   return { packs, cleanURL: page.href };
 }
 
+/**
+ * 导入地址栏下载的一批包：全部校验通过才返回，有一个坏包就整批不导入，刷新后还能重试
+ * @throws 有包校验失败时
+ */
+export function importProjects(packs: Array<{ filename: string; bytes: Uint8Array }>, projects: ViewerProject[]): ViewerProject[] {
+  return packs.map(({ bytes, filename }) => importProject(bytes, filename, projects, true));
+}
+
+/**
+ * 站点导出时带了默认包（viewer.json 的 defaultPacks），浏览器里又还没有项目时，把它们当作地址栏的 pack 参数交给 downloadPacks。
+ * 地址栏已经指定了 pack 时以地址栏为准
+ */
+export function withDefaultPacks(pageURL: string, defaultPacks: string[], hasProjects: boolean): string {
+  const page = new URL(pageURL);
+  if (hasProjects || page.searchParams.has('pack')) return pageURL;
+  for (const pack of defaultPacks) page.searchParams.append('pack', pack);
+  return page.href;
+}
+
 /** 将编辑表格转换为项目 env；不改动变量值，非法或重复键阻止整个保存。 */
 export function parseEnv(rows: Array<[string, string]>): Record<string, string> {
   const entries: Array<[string, string]> = [];

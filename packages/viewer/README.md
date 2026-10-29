@@ -63,6 +63,15 @@ npx wxa-runner viewer export ./viewer-export
 
 浏览器不允许跨域访问你的接口时才需要转发。接口本身允许跨域，或者请求全部用 setup 拦截了，只部署 `site/` 就够了。
 
+想让别人打开就能看到小程序，导出时用 `--pack` 带上默认包（可以写多次）：
+
+```bash
+npx wxa-runner viewer export ./viewer-export --pack my-app.wxapack
+```
+
+包会放在 `site/__wxa__/preload/` 下。访问者的浏览器里还没有项目时自动导入，之后就和自己导入的项目一样，能改 setup 和环境变量；
+把项目全部删掉再刷新，默认包会重新导入。要指定打开哪个包，链接里带上 `?pack=/__wxa__/preload/my-app.wxapack`。
+
 要转发时，把路径以 `/__wxa__/proxy/` 开头的请求交给 `proxy.mjs`，其余请求交给 `site/`。`allowedHosts` 是能转发到的域名，`*.example.com` 匹配所有子域名；
 为空时拒绝转发，免得部署出去的查看器变成谁都能用的代理。接到哪个平台由你决定，下面以 Cloudflare Workers 为例（`site/` 作为静态资源，`proxy.mjs` 放在同一目录）：
 
