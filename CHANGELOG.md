@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.12.0](https://github.com/open-wxa/wxa-runner/compare/v0.11.0...v0.12.0) (2026-10-30)
+
+
+### 新功能
+
+* web-view 新增新窗口模式，和模拟器跨站的网页 Cookie 也能正常使用 ([#97](https://github.com/open-wxa/wxa-runner/issues/97)) ([05c4d44](https://github.com/open-wxa/wxa-runner/commit/05c4d44f1c24ab7fc5e1399bb718d59f0c2f65cf)), closes [#95](https://github.com/open-wxa/wxa-runner/issues/95)
+
 ## [0.11.0](https://github.com/open-wxa/wxa-runner/compare/v0.10.1...v0.11.0) (2026-10-29)
 
 
