@@ -108,6 +108,11 @@ export interface DevServerOptions {
    * 默认不转发；命令行默认 'errors'，检测到编程助手时 'all'
    */
   forwardConsole?: ForwardConsole;
+  /**
+   * web-view 的网页在新窗口打开，而不是嵌在模拟器里的 iframe 中。网页成为顶层页面，
+   * 和模拟器域名不同时 Cookie 也能正常使用；默认 false
+   */
+  webViewWindow?: boolean;
   /** 注入每个渲染层页面（含插件页面、跳转后新建的页面）的脚本，供检查器等开发工具使用 */
   webviewScripts?: WebviewScript[];
   /** 挂在开发服务器上的中间件，供开发工具提供自己的页面和接口 */
@@ -276,7 +281,8 @@ export class DevServer {
         baseLibVersion: this.baseLib.version,
         device: this.device,
         devtoolsLogin: this.devtoolsLogin,
-        forwardConsole: this.options.forwardConsole ?? false
+        forwardConsole: this.options.forwardConsole ?? false,
+        webViewWindow: this.options.webViewWindow ?? false
       };
       try {
         // 宿主打开小程序时先取 app-info：这时重新决定用哪些插件，之后的请求都按这个结果

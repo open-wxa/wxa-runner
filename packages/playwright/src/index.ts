@@ -18,6 +18,7 @@ import { devServerOptions, WxaServerOptions } from './server';
 
 export type { MiniProgram, MockHandler, RouteHandler } from './miniProgram';
 export type { MiniProgramRequest } from './request';
+export type { WebViewInfo } from '@open-wxa/wxa-runner-core';
 export type { WxaServerOptions } from './server';
 
 /** 在 playwright.config.ts 的 use 里配置，或在用例文件里用 test.use 修改 */
@@ -31,6 +32,11 @@ export interface WxaOptions {
   wxaServerOptions: WxaServerOptions;
   /** 用例结束时检查 errors() 为空，默认 true。有意触发运行时错误的用例用 test.use({ wxaCheckErrors: false }) 关掉 */
   wxaCheckErrors: boolean;
+  /**
+   * web-view 的网页怎么打开，默认 'iframe'：嵌在模拟器里，网页和模拟器域名不同时，SameSite 为 Lax、Strict 或没写的 Cookie 不生效。
+   * 'window' 在新窗口里打开，网页是顶层页面，Cookie 能正常使用，用 miniProgram.webView() 拿到网页窗口。可以按用例修改
+   */
+  wxaWebView: 'iframe' | 'window';
 }
 
 export interface WxaFixtures {
@@ -46,12 +52,13 @@ export interface WxaWorkerFixtures {
 const ERRORS_HINT = '小程序有运行时错误，或调用了未实现的 wx API（用到的请 mock）。有意触发错误的用例可以 test.use({ wxaCheckErrors: false })';
 
 export const test = base.extend<
-  WxaFixtures & Pick<WxaOptions, 'wxaCheckErrors'>,
+  WxaFixtures & Pick<WxaOptions, 'wxaCheckErrors' | 'wxaWebView'>,
   WxaWorkerFixtures & Pick<WxaOptions, 'wxaProject' | 'wxaServerOptions'>
 >({
   wxaProject: ['.', { scope: 'worker', option: true }],
   wxaServerOptions: [{}, { scope: 'worker', option: true }],
   wxaCheckErrors: [true, { option: true }],
+  wxaWebView: ['iframe', { option: true }],
 
   wxaServer: [async ({ wxaProject, wxaServerOptions }, use, workerInfo) => {
     const configDir = workerInfo.config.configFile ? path.dirname(workerInfo.config.configFile) : process.cwd();
@@ -61,10 +68,11 @@ export const test = base.extend<
     await server.close();
   }, { scope: 'worker', timeout: 60000 }],
 
-  miniProgram: async ({ page, wxaServer, wxaCheckErrors }, use) => {
+  miniProgram: async ({ page, wxaServer, wxaCheckErrors, wxaWebView }, use) => {
     const session = await createMiniProgram(page, {
       baseURL: wxaServer.url,
-      listPages: () => wxaServer.builder.build().then(build => build.pages, () => null)
+      listPages: () => wxaServer.builder.build().then(build => build.pages, () => null),
+      webViewWindow: wxaWebView === 'window'
     });
     await use(session.miniProgram);
 

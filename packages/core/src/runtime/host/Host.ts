@@ -25,7 +25,7 @@ import { createSubpackageApis } from './api/subpackages';
 import { createSystemApis } from './api/system';
 import { tempFileRootPath } from './api/tempFiles';
 import { createUiApis } from './api/ui';
-import { createWebViewApis } from './api/webView';
+import { createWebViewApis, iframeWebViews, WebViewInfo, WebViewWindows } from './api/webView';
 import { PageStack } from './PageStack';
 import { PageView } from './PageView';
 import { cloneInto, cloneNativeInto } from './realm';
@@ -102,6 +102,8 @@ export class Host implements HostApi {
   /** 渲染层报来的 2d、webgl 画布，按编号记下所在页面和最近的位置，供 placeCanvas 认出逻辑层的画布元素 */
   private readonly canvases = new Map<number, CanvasRecord>();
   private readonly forwarder: ConsoleForwarder;
+  /** 新窗口模式下 web-view 的网页窗口；默认的 iframe 模式为 null */
+  private readonly webViewWindows: WebViewWindows | null;
 
   /** @param sendReport 把报错发给开发服务器打印到终端，见 AppInfo.forwardConsole */
   constructor(readonly info: AppInfo, root: HTMLElement, sendReport: (report: ConsoleReport) => void = () => undefined) {
@@ -116,6 +118,13 @@ export class Host implements HostApi {
     this.shell = new PhoneShell(root, info.device);
     this.tabPaths = new Set((info.wxConfig.tabBar?.list || []).map((item: any) => stripHtml(item.pagePath)));
     this.storage = new MiniProgramStorage(window.localStorage, info.appid);
+    this.webViewWindows = info.webViewWindow
+      ? new WebViewWindows(info.device, webviewId => this.currentPage()?.id === webviewId)
+      : null;
+    if (this.webViewWindows) {
+      const windows = this.webViewWindows;
+      window.addEventListener('pagehide', () => windows.closeAll());
+    }
 
     const tabBar = info.wxConfig.tabBar
       ? { ...info.wxConfig.tabBar, list: info.wxConfig.tabBar.list.map((item: any) => ({ ...item, pagePath: stripHtml(item.pagePath) })) }
@@ -433,11 +442,12 @@ export class Host implements HostApi {
 
   private closePage(page: PageView, options = { keepTab: true }) {
     if (options.keepTab && this.tabPaths.has(page.path) && this.tabPages.get(page.path) === page) {
-      page.hide();
+      this.hidePage(page);
       return;
     }
     if (this.tabPages.get(page.path) === page) this.tabPages.delete(page.path);
     this.pages.delete(page.id);
+    this.webViewWindows?.pageDestroyed(page.id);
     page.destroy();
     // 页面直接关掉时渲染层不一定发 canvasRemoved
     for (const [canvasNumber, record] of this.canvases) {
@@ -447,9 +457,10 @@ export class Host implements HostApi {
 
   private activate(page: PageView, openType: OpenType) {
     for (const other of this.pages.values()) {
-      if (other !== page) other.hide();
+      if (other !== page) this.hidePage(other);
     }
     page.show();
+    this.webViewWindows?.pageShown(page.id);
 
     page.navigation = { ...page.navigation, showBack: this.stack.size > 1 };
     this.shell.setNavigation(page.navigation);
@@ -464,6 +475,16 @@ export class Host implements HostApi {
       if (this.currentPage() === page) this.emitToService('onAppRouteDone', data, page.id);
     }, ROUTE_DONE_DELAY);
     this.routeListeners.forEach(listener => listener(page, openType));
+  }
+
+  private hidePage(page: PageView) {
+    page.hide();
+    this.webViewWindows?.pageHidden(page.id);
+  }
+
+  /** 页面里设置过 src 的 web-view，按创建顺序 */
+  webViewsOf(page: PageView): WebViewInfo[] {
+    return this.webViewWindows ? this.webViewWindows.list(page.id) : iframeWebViews(page.win?.document);
   }
 
   /** 宿主地址栏同步为当前页面，刷新后可回到同一页面 */
@@ -598,7 +619,8 @@ export class Host implements HostApi {
       }),
       ...createWebViewApis({
         documentOf: webviewId => this.pages.get(webviewId)?.win?.document,
-        emitToWebview: (webviewId, event, data) => this.emitToWebview(webviewId, event, data)
+        emitToWebview: (webviewId, event, data) => this.emitToWebview(webviewId, event, data),
+        windows: this.webViewWindows
       }),
       ...createMiscApis(this.info.appid, {
         devtoolsLogin: this.info.devtoolsLogin,

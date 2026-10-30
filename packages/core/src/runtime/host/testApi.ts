@@ -4,6 +4,7 @@
 
 import type { RouteHandler } from '../../setup';
 import type { RecordedRequest } from './api/network';
+import type { WebViewInfo } from './api/webView';
 import type { ApiHandler, ApiResult } from './api/registry';
 import { compilePattern } from './api/routes';
 import { decodeStorageValue } from './api/storage';
@@ -11,7 +12,7 @@ import type { FrameError, Host } from './Host';
 import { cloneInto } from './realm';
 import { TASK_APIS } from './setup';
 
-export type { RecordedRequest };
+export type { RecordedRequest, WebViewInfo };
 
 export interface PageSnapshot {
   webviewId: number;
@@ -29,6 +30,11 @@ export interface WxaTestApi {
   currentPage(): PageSnapshot | null;
   /** 整个页面栈，栈底在前 */
   pageStack(): PageSnapshot[];
+  /**
+   * 当前页里设置过 src 的 web-view，按创建顺序；小程序启动前为空数组。
+   * 新窗口模式下 windowName 是网页所在窗口的 name，可以用它找到这个窗口；iframe 模式下为 null
+   */
+  webViews(): WebViewInfo[];
   /**
    * 等到指定页面成为当前页，已经是当前页时立即返回
    * @param path 页面路径，如 pages/index/index，开头的 / 可有可无
@@ -128,6 +134,10 @@ export function installTestApi(host: Host, ready: Promise<void>): WxaTestApi {
     ready,
     currentPage: () => snapshot(host.currentPage()),
     pageStack: () => host.pageStack().map(page => snapshot(page)!),
+    webViews: () => {
+      const page = host.currentPage();
+      return page ? host.webViewsOf(page) : [];
+    },
     waitForPage(path, timeout = 10000) {
       const target = path.replace(/^\//, '');
       return new Promise((resolve, reject) => {

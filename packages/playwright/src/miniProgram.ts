@@ -15,7 +15,7 @@ type Remote<T> = { [K in keyof T]: T[K] extends (...args: infer A) => infer R ? 
 
 /** 原样转发给浏览器的测试 API，说明复用 WxaTestApi 的注释 */
 type ForwardedApi = Remote<Pick<WxaTestApi,
-  | 'currentPage' | 'pageStack' | 'waitForPage' | 'pageData' | 'callPageMethod'
+  | 'currentPage' | 'pageStack' | 'webViews' | 'waitForPage' | 'pageData' | 'callPageMethod'
   | 'navigateTo' | 'navigateBack' | 'redirectTo' | 'reLaunch' | 'switchTab'
   | 'getStorage' | 'clearStorage' | 'clearRequests'>>;
 
@@ -72,6 +72,14 @@ export interface MiniProgram extends ForwardedApi {
    * 包括本用例里之前打开页面时出现的。用例结束时 fixture 会检查它为空（wxaCheckErrors）
    */
   errors(): Promise<FrameError[]>;
+  /**
+   * 当前页 web-view 打开的网页窗口，只在新窗口模式下可用（test.use({ wxaWebView: 'window' })）。
+   * 网页窗口跟着所在页面走：跳到别的页面时关闭，返回时重新打开，之后要重新获取
+   * @param options.index 当前页有多个 web-view 时取第几个，从 0 开始，顺序同 webViews()
+   * @param options.timeout 等窗口打开的毫秒数，默认 10000
+   * @throws 不是新窗口模式；当前页有多个 web-view 却没给 index；超时，错误信息里列出可能的原因
+   */
+  webView(options?: { index?: number; timeout?: number }): Promise<Page>;
 }
 
 export interface MiniProgramSession {
@@ -84,6 +92,8 @@ export interface MiniProgramOptions {
   baseURL: string;
   /** app.json 里的页面；编译失败时为 null，由模拟器显示编译错误 */
   listPages(): Promise<string[] | null>;
+  /** web-view 的网页在新窗口打开，见 WxaOptions.wxaWebView */
+  webViewWindow?: boolean;
 }
 
 /** 浏览器调用 Node 的通道名 */
@@ -91,6 +101,7 @@ const BRIDGE = '__wxa_playwright__';
 /** 二进制的拦截响应体在传给浏览器时换成 { [BINARY_BODY]: base64 }，见 encodeBinaryBody */
 const BINARY_BODY = '__wxa_binary_body__';
 const DEFAULT_REQUEST_TIMEOUT = 10000;
+const DEFAULT_WEB_VIEW_TIMEOUT = 10000;
 
 /** 基础库同步调用的原生 API：wx.getWindowInfo、getDeviceInfo、getSystemInfoSync 等都同步调用 getSystemInfo */
 const SYNC_APIS = new Set(['getSystemInfo', 'getMenuButtonBoundingClientRect']);
@@ -153,6 +164,69 @@ function fromPage(request: RecordedRequest): MiniProgramRequest {
   return withBody({ ...request, data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) });
 }
 
+/**
+ * 新窗口模式下收集宿主打开的网页窗口，按窗口名（webViews() 的 windowName）对应到 Page。
+ *
+ * 不读网页的 window.name：网页可以改掉它，设置了 Cross-Origin-Opener-Policy 时还会被清空。宿主每新开一个窗口都会经
+ * __wxa_webview_window_event__ 告诉这里窗口名，和 popup 事件按先后配对（地址相同的优先，网页重定向后按顺序）。
+ * Cross-Origin-Opener-Policy 下宿主关不掉窗口，这里替它关：宿主关窗口时关掉对应的 Page，同名窗口重新打开时关掉旧的。
+ * 从一开始就收集：等调用 webView() 时窗口可能早已打开，再监听 popup 会错过
+ */
+async function trackWebViewWindows(page: Page) {
+  const windows = new Map<string, Page>();
+  const opened: Array<{ name: string; src: string; closed: boolean }> = [];
+  const popups: Page[] = [];
+  const close = (popup: Page | undefined) => popup && !popup.isClosed() ? popup.close().catch(() => undefined) : undefined;
+
+  const pair = () => {
+    while (opened.length && popups.length) {
+      const popup = popups.shift()!;
+      const index = Math.max(0, opened.findIndex(open => open.src === popup.url()));
+      const [{ name, closed }] = opened.splice(index, 1);
+      if (closed) {
+        void close(popup);
+        continue;
+      }
+      const previous = windows.get(name);
+      windows.set(name, popup);
+      if (previous !== popup) void close(previous);
+    }
+  };
+
+  await page.exposeFunction('__wxa_webview_window_event__', (type: 'open' | 'close', name: string, src?: string) => {
+    if (type === 'open') {
+      opened.push({ name, src: src ?? '', closed: false });
+      pair();
+      return;
+    }
+    // 还没等到 popup 事件就关了：配对时再关
+    const pending = opened.find(open => open.name === name);
+    if (pending) pending.closed = true;
+    void close(windows.get(name));
+    windows.delete(name);
+  });
+  await page.addInitScript(() => {
+    window.__wxa_webview_window__ = true;
+  });
+  page.on('popup', popup => {
+    popups.push(popup);
+    pair();
+  });
+
+  return {
+    get(name: string): Page | undefined {
+      const popup = windows.get(name);
+      return popup && !popup.isClosed() ? popup : undefined;
+    },
+    async closeAll() {
+      const all = [...windows.values(), ...popups.splice(0)];
+      windows.clear();
+      opened.length = 0;
+      await Promise.all(all.map(close));
+    }
+  };
+}
+
 /** 等小程序启动完成；启动失败时返回模拟器上显示的错误 */
 function waitForLaunch(): Promise<string | null> {
   return new Promise(resolve => {
@@ -172,7 +246,7 @@ function waitForLaunch(): Promise<string | null> {
   });
 }
 
-export async function createMiniProgram(page: Page, { baseURL, listPages }: MiniProgramOptions): Promise<MiniProgramSession> {
+export async function createMiniProgram(page: Page, { baseURL, listPages, webViewWindow = false }: MiniProgramOptions): Promise<MiniProgramSession> {
   const operations: Operation[] = [];
   /** Node 里的处理函数。撤销后也保留：撤销前已经发出的调用仍由它处理 */
   const handlers = new Map<number, { source: string; run: (args: any[]) => unknown }>();
@@ -197,6 +271,8 @@ export async function createMiniProgram(page: Page, { baseURL, listPages }: Mini
     }
   });
   await page.addInitScript(installInPage, { bridge: BRIDGE, binaryBody: BINARY_BODY });
+
+  const windows = webViewWindow ? await trackWebViewWindows(page) : null;
 
   /** 已经打开的页面上立即执行（规则写错等在这里报错），再记下来供之后加载页面时重放 */
   const declare = async (operation: Operation) => {
@@ -238,6 +314,8 @@ export async function createMiniProgram(page: Page, { baseURL, listPages }: Mini
       if (pages && !pages.includes(path)) throw new Error(`页面 ${path} 不在 app.json 的 pages 里`);
 
       earlierErrors.push(...await currentErrors());
+      // 宿主离开时自己会关掉网页窗口；网页设置了 Cross-Origin-Opener-Policy 时宿主拿不到窗口，这里兜底
+      await windows?.closeAll();
       const search = [path && `path=${encodeURIComponent(path)}`, query].filter(Boolean).join('&');
       await page.goto(`${baseURL}/${search ? `?${search}` : ''}`);
       // 编译失败时测试 API 不会安装，只显示错误
@@ -281,8 +359,36 @@ export async function createMiniProgram(page: Page, { baseURL, listPages }: Mini
 
     errors: async () => [...earlierErrors, ...await currentErrors()],
 
+    async webView({ index, timeout = DEFAULT_WEB_VIEW_TIMEOUT } = {}) {
+      if (!windows) {
+        throw new Error("webView() 只在新窗口模式下可用：test.use({ wxaWebView: 'window' })。默认模式下网页在 miniProgram.current.frameLocator('iframe') 里");
+      }
+      const deadline = Date.now() + timeout;
+      for (;;) {
+        const views = await miniProgram.webViews();
+        if (views.length > 1 && index === undefined) {
+          throw new Error(`当前页有 ${views.length} 个 web-view，用 webView({ index }) 指定第几个（从 0 开始）：\n${views.map((view, i) => `  ${i}: ${view.src}`).join('\n')}`);
+        }
+        if (index !== undefined && views.length && (index < 0 || index >= views.length)) {
+          throw new Error(`当前页只有 ${views.length} 个 web-view，index 应在 0 到 ${views.length - 1} 之间`);
+        }
+        const name = views[index ?? 0]?.windowName;
+        const found = name ? windows.get(name) : undefined;
+        if (found) return found;
+        if (Date.now() >= deadline) break;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      throw new Error(
+        `等待 web-view 的网页窗口超时（${timeout}ms）。可能的原因：\n` +
+          '  - 当前页没有 web-view，或 web-view 还没有设置 src\n' +
+          '  - 弹出窗口被浏览器拦截：Playwright 启动浏览器时默认带 --disable-popup-blocking，配置里用 ignoreDefaultArgs 去掉了它\n' +
+          '  - 网页窗口已被关闭'
+      );
+    },
+
     currentPage: forward('currentPage'),
     pageStack: forward('pageStack'),
+    webViews: forward('webViews'),
     waitForPage: forward('waitForPage'),
     pageData: forward('pageData'),
     callPageMethod: forward('callPageMethod'),

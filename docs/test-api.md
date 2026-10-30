@@ -71,6 +71,7 @@ test.afterEach(async ({ page }) => {
 | --- | --- |
 | `ready` | 小程序启动完成后 resolve 的 Promise |
 | `currentPage()` / `pageStack()` | 当前页 / 整个页面栈，每页有 `path`、`query`、`webviewId`、`frameName`（可用于 `page.frame({ name })`） |
+| `webViews()` | 当前页的 web-view（还没设置 `src` 的不算），每个有 `src`；新窗口模式下还有网页窗口的名字 `windowName`，默认模式下为 `null` |
 | `waitForPage(path, timeout?)` | 等到指定页面成为当前页，默认超时 10 秒 |
 | `pageData(path?)` | 页面的 `data`（拷贝）。不传 `path` 时读当前页；页面不在页面栈里时为 `null` |
 | `callPageMethod(name, ...args)` | 调用当前页的方法，返回方法的返回值（返回 Promise 时等它完成）。参数要能 JSON 序列化 |

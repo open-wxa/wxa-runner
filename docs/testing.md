@@ -210,6 +210,7 @@ expect(req.body).toEqual({ name: '张三' });
 | --- | --- |
 | `pageData(path?)` | 页面的 `data`。不传时读当前页 |
 | `currentPage()` / `pageStack()` | 当前页 / 整个页面栈，每页有 `path`、`query` |
+| `webViews()` / `webView()` | 当前页的 web-view / 新窗口模式下 web-view 打开的网页窗口，见 [web-view 里的网页](#web-view-里的网页) |
 | `waitForPage(path)` | 等到这个页面成为当前页 |
 | `callPageMethod(name, ...args)` | 调用当前页的方法，返回方法的返回值 |
 | `navigateTo(url)`、`navigateBack()`、`redirectTo(url)`、`reLaunch(url)`、`switchTab(url)` | 直接跳转，同 `wx` 上的同名 API |
@@ -238,6 +239,36 @@ test('上传头像', async ({ miniProgram, page }) => {
 - 菜单、图片预览这些弹层在 `page` 上，不在 `miniProgram.current` 里。预览层用 `page.getByRole('dialog', { name: '图片预览' })` 找到
 - `chooser.setFiles([])` 等于用户关掉选择框，页面收到 `cancel`
 
+### web-view 里的网页
+
+默认模式下，web-view 的网页是当前页里的 iframe：
+
+```ts
+const h5 = miniProgram.current.frameLocator('iframe');
+await expect(h5.locator('h1')).toHaveText('活动详情');
+```
+
+网页和模拟器（localhost）不是同一个站点时，网页的 Cookie 多半不生效（原因见 [web-view 的 Cookie](./features.md#web-view-的-cookie)）。
+需要登录态等 Cookie 时开启新窗口模式，网页在新窗口里打开，用 `miniProgram.webView()` 拿到这个窗口（Playwright 的 `Page`）。
+Cookie 用 Playwright 自带的 `context.addCookies` 注入：
+
+```ts
+test.use({ wxaWebView: 'window' });
+
+test('H5 登录后显示用户名', async ({ miniProgram, context }) => {
+  await context.addCookies([{ name: 'session', value: 'x', url: 'https://h5.example.com', sameSite: 'Lax' }]);
+  await miniProgram.open('pages/webview/webview?src=' + encodeURIComponent('https://h5.example.com/user'));
+
+  const h5 = await miniProgram.webView();
+  await expect(h5.locator('#user')).toHaveText('张三');
+});
+```
+
+- `webView()` 等当前页的网页窗口打开后返回，默认超时 10 秒。当前页有多个 web-view 时用 `webView({ index })` 指定
+- 跳到下一页时窗口关闭，返回后重新打开，要再调用一次 `webView()` 拿新窗口。网页设置了 `Cross-Origin-Opener-Policy` 时，`src` 改变也会换成新窗口
+- 新窗口模式不触发 `bindload`，其他和微信的差异见 [web-view 的 Cookie](./features.md#web-view-的-cookie)
+- 弹出窗口靠 Playwright 默认的 `--disable-popup-blocking` 参数，不要在 `ignoreDefaultArgs` 里去掉它
+
 ### 检查运行时错误
 
 每个用例结束时，fixture 检查小程序有没有出错，有就让用例失败：
@@ -256,6 +287,7 @@ test('上传头像', async ({ miniProgram, page }) => {
 | `wxaProject` | `'.'` | 小程序目录，相对配置文件 |
 | `wxaServerOptions` | `{}` | 开发服务器的其他参数，如 `setup`、`baseLibVersion`、`devtoolsLogin`。路径相对配置文件 |
 | `wxaCheckErrors` | `true` | 用例结束时[检查运行时错误](#检查运行时错误) |
+| `wxaWebView` | `'iframe'` | web-view 的网页嵌在页面里（`'iframe'`），还是在新窗口打开（`'window'`），见 [web-view 里的网页](#web-view-里的网页) |
 
 - 每个 worker（Playwright 并行运行用例的进程）启动一个开发服务器，小程序只编译一次；每个用例用新的浏览器上下文，Storage、文件和页面栈互不影响
 - 测试时不监听文件变化、不热更新，运行环境和真机一致

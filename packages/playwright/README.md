@@ -39,6 +39,7 @@ test('提交订单后跳转到结果页', async ({ miniProgram }) => {
 - `mock`、`route` 可以传 Node 里的函数，能用用例里的变量、检查参数；函数抛错时用例失败
 - 用例结束时检查运行时错误和未实现的 wx API，`wxaCheckErrors: false` 可以关掉
 - 每个 worker 一个开发服务器，每个用例一个新的浏览器上下文，并行运行互不影响
+- web-view 的网页和小程序不同域名时，`test.use({ wxaWebView: 'window' })` 让网页在新窗口打开，Cookie 才能正常使用，`miniProgram.webView()` 拿到这个窗口
 
 配置项、mock 的限制等见 [在 Playwright 中测试](https://open-wxa.github.io/wxa-runner/testing)。
 

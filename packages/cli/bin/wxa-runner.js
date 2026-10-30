@@ -32,6 +32,7 @@ program
   .option('--forward-console', '浏览器里的 console.warn / console.error 也转发到终端（检测到编程助手时默认开启）')
   .option('--no-forward-console', '浏览器里的报错不转发到终端')
   .option('--devtools-login', '借本机微信开发者工具的登录态访问微信后台：真实的 code 和手机号、服务市场、插件')
+  .option('--webview-window', 'web-view 的网页在新窗口打开：网页和模拟器域名不同时，Cookie 也能正常使用')
   .option('--extension <module>', '加载开发服务器扩展（npm 包名或文件路径），可以写多次', (value, previous) => [...previous, value], [])
   // 旧名，开发服务器会提示改用 --devtools-login
   .addOption(new Option('--real-login').hideHelp())
@@ -53,7 +54,8 @@ program
         watch: options.watch,
         devtoolsLogin: options.devtoolsLogin,
         realLogin: options.realLogin,
-        forwardConsole: forward.mode
+        forwardConsole: forward.mode,
+        webViewWindow: options.webviewWindow
       });
       const url = await server.start();
 

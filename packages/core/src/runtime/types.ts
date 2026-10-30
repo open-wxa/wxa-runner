@@ -68,6 +68,8 @@ export interface AppInfo {
   setup?: { env: Record<string, string>; error?: string };
   /** 没有时不转发 */
   forwardConsole?: ForwardConsole;
+  /** web-view 的网页在新窗口打开，见 api/webView.ts 的 WebViewWindows */
+  webViewWindow?: boolean;
 }
 
 /** 逻辑层发给 Worker 的消息（runtime/workers.ts → runtime/worker.ts） */

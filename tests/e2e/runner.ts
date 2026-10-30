@@ -55,6 +55,8 @@ export interface RunnerOptions {
   logger?: DevServerOptions['logger'];
   /** 开发工具用的扩展点 */
   extensions?: Pick<DevServerOptions, 'webviewScripts' | 'middlewares' | 'wxmlTransform'>;
+  /** web-view 的网页在新窗口打开 */
+  webViewWindow?: boolean;
 }
 
 export interface Runner {
@@ -79,6 +81,7 @@ export async function startRunner(project: Record<string, string | object> | str
     baseLibCacheDir: options.baseLibCacheDir,
     devtoolsLogin: options.devtoolsLogin,
     forwardConsole: options.forwardConsole,
+    webViewWindow: options.webViewWindow,
     runtimeDir: RUNTIME_DIR,
     logger: options.logger ?? { log: () => undefined, warn: () => undefined, error: () => undefined },
     ...options.extensions

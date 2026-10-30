@@ -23,6 +23,8 @@ async function main() {
     return;
   }
 
+  // 测试工具可以在页面脚本之前用 __wxa_webview_window__ 只为这次打开开启新窗口模式
+  if (window.__wxa_webview_window__ === true) info.webViewWindow = true;
   const host = new Host(info, root, sendReport);
   (window as any).__wxaHost = host;
 

@@ -17,7 +17,7 @@ export { createWxConfig } from './project/wxConfig';
 export type { AppInfo, DeviceProfile, ForwardConsole } from './runtime/types';
 export type { ApiContext, ApiHandler, ApiResult } from './runtime/host/api/registry';
 export type { FrameError } from './runtime/host/Host';
-export type { PageSnapshot, RecordedRequest, WxaTestApi } from './runtime/host/testApi';
+export type { PageSnapshot, RecordedRequest, WebViewInfo, WxaTestApi } from './runtime/host/testApi';
 export type {
   MockConfig, MockRequest, MockResponse, MockValue, NetworkConfig, RouteHandler,
   SetupApi, SetupConfig, SetupContext, SetupDefinition
