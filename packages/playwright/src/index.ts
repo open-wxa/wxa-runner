@@ -12,6 +12,7 @@
 import path from 'path';
 import { expect as baseExpect, test as base } from '@playwright/test';
 import { DevServer } from '@open-wxa/wxa-runner-core';
+import { withEagerSourcePositions } from './launchOptions';
 import { miniProgramMatchers } from './matchers';
 import { createMiniProgram, MiniProgram } from './miniProgram';
 import { devServerOptions, WxaServerOptions } from './server';
@@ -59,6 +60,11 @@ export const test = base.extend<
   wxaServerOptions: [{}, { scope: 'worker', option: true }],
   wxaCheckErrors: [true, { option: true }],
   wxaWebView: ['iframe', { option: true }],
+
+  // 配置文件 use 里的 launchOptions 照常传进来；用例文件里 test.use({ launchOptions }) 会整个替换掉这里，不再追加
+  launchOptions: [async ({ launchOptions, browserName }, use) => {
+    await use(browserName === 'chromium' ? { ...launchOptions, args: withEagerSourcePositions(launchOptions.args) } : launchOptions);
+  }, { scope: 'worker' }],
 
   wxaServer: [async ({ wxaProject, wxaServerOptions }, use, workerInfo) => {
     const configDir = workerInfo.config.configFile ? path.dirname(workerInfo.config.configFile) : process.cwd();
