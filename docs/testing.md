@@ -128,6 +128,31 @@ await page.getByText('去结算').click();
 await expect(page.locator('#count')).toHaveText('1');
 ```
 
+### 给 web-view 注入 Cookie
+
+在 web-view 发起首次请求前调用 `setWebViewCookies`。Cookie 写进当前用例的浏览器上下文，支持跨域和
+`httpOnly`；`url`、`domain`、`path`、`sameSite` 等字段与
+[Playwright `BrowserContext.addCookies`](https://playwright.dev/docs/api/class-browsercontext#browser-context-add-cookies)
+相同。
+
+```ts
+await miniProgram.setWebViewCookies([
+  {
+    name: 'session',
+    value: 'test-session',
+    url: 'https://h5.example.com',
+    httpOnly: true,
+    sameSite: 'Lax'
+  }
+]);
+
+// 也可以先 open 小程序页，再在点击进入 H5 的按钮前调用
+await miniProgram.open('pages/webview/webview?src=https%3A%2F%2Fh5.example.com');
+```
+
+每个用例使用新的浏览器上下文，Cookie 不会带到其他用例。这个能力只在 Playwright fixture 里提供：
+浏览器页面脚本受同源策略限制，core 的 setup 不能给任意跨域 web-view 写 Cookie。
+
 ### 断言
 
 除了 Playwright 自带的断言，还能断言小程序的状态，不满足时自动重试到超时：
