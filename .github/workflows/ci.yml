@@ -55,9 +55,21 @@ jobs:
 
       - run: pnpm lint
 
-  test:
+  # 测试分到三台机器上并行跑：pnpm test 分成两片，Playwright 用例和打包检查单独一台。
+  # e2e 每个文件都要起 Chrome 和开发服务器，一台 4 核机器跑 2 个文件时 CPU 已经占满，同一台机器上加并发反而更慢
+  test-part:
+    name: test (${{ matrix.part }})
     # Linux 上没有微信开发者工具：编译器用 miniprogram-compiler 的 Linux 版，基础库用 @open-wxa/wxa-baselib
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: vitest 1/2
+            shard: 1/2
+          - part: vitest 2/2
+            shard: 2/2
+          - part: playwright
     env:
       # runner 镜像自带 Google Chrome
       WXA_CHROME: /usr/bin/google-chrome
@@ -84,10 +96,21 @@ jobs:
           node packages/cli/bin/wxa-runner.js baselib extract
           test -x "$WXA_CHROME"
 
-      - run: pnpm test
+      - if: matrix.shard
+        run: pnpm test --shard=${{ matrix.shard }}
 
       # tests/playwright：用 Playwright fixture 写的用例
-      - run: pnpm test:playwright
+      - if: matrix.part == 'playwright'
+        run: pnpm test:playwright
 
       # 打包全部 npm 包，像外部用户一样用 npm 安装到新目录，确认 wxa-runner dev 能启动、用上内置基础库
-      - run: node scripts/release.mjs --dry-run
+      - if: matrix.part == 'playwright'
+        run: node scripts/release.mjs --dry-run
+
+  # 分支保护要求名为 test 的检查通过：三部分都通过才算通过
+  test:
+    needs: test-part
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: test "${{ needs.test-part.result }}" = success
