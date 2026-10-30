@@ -260,6 +260,17 @@ test('上传头像', async ({ miniProgram, page }) => {
 - 每个 worker（Playwright 并行运行用例的进程）启动一个开发服务器，小程序只编译一次；每个用例用新的浏览器上下文，Storage、文件和页面栈互不影响
 - 测试时不监听文件变化、不热更新，运行环境和真机一致
 - `wxaProject`、`wxaServerOptions` 只能写在配置文件或用例文件顶层的 `test.use` 里，不能写在 `describe` 里
+- 启动 Chrome 时默认加上 V8 参数 `--js-flags=--no-enable-lazy-source-positions`，打开页面快约 1/3（见下方说明）。`launchOptions.args` 里已有 `--js-flags` 时合并进去；
+  已经指定了 `lazy-source-positions` 相关参数时按你的来。用例文件里的 `test.use({ launchOptions })` 会整个替换 fixture 的设置，不再加这个参数，要改启动参数请写在配置文件里
+
+<details class="details custom-block">
+<summary>为什么要加这个 V8 参数</summary>
+
+V8 编译函数时默认不记源码位置，需要时再重新解析函数补上。Playwright 连着浏览器时 V8 要给每个函数补，
+基础库是几 MB 的压缩文件，外层几个函数几乎就是整个文件，每补一个都要重新解析几十毫秒：WAService.js 初始化从约 110ms 变成约 350ms。
+编译时就记下源码位置能省掉这一步；不连着浏览器时这个参数不影响速度。
+
+</details>
 
 <details class="details custom-block">
 <summary>小程序写入的文件存在哪</summary>

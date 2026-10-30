@@ -39,6 +39,7 @@ test('提交订单后跳转到结果页', async ({ miniProgram }) => {
 - `mock`、`route` 可以传 Node 里的函数，能用用例里的变量、检查参数；函数抛错时用例失败
 - 用例结束时检查运行时错误和未实现的 wx API，`wxaCheckErrors: false` 可以关掉
 - 每个 worker 一个开发服务器，每个用例一个新的浏览器上下文，并行运行互不影响
+- Chrome 默认带上 `--js-flags=--no-enable-lazy-source-positions`，Playwright 连着浏览器时基础库初始化不用重新解析源码，打开页面快约 1/3
 
 配置项、mock 的限制等见 [在 Playwright 中测试](https://open-wxa.github.io/wxa-runner/testing)。
 

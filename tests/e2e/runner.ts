@@ -9,6 +9,7 @@ import path from 'path';
 import { chromium, Frame, LaunchOptions, Page } from 'playwright';
 import { expect } from 'vitest';
 import { listBaseLibs } from '../../packages/extractor/src/baselib';
+import { withEagerSourcePositions } from '../../packages/playwright/src/launchOptions';
 import { DevServer, DevServerOptions } from '../../packages/core/src/server/DevServer';
 import { createProject, hasToolchain, REPO_ROOT } from '../helpers';
 
@@ -33,12 +34,15 @@ export const installedBaseLibs = e2eReady ? new Set(listBaseLibs().map(lib => li
  *
  * macOS 上关掉了 App Nap：没有窗口的 Chrome 偶尔会在申请 App Nap 断言时一直等系统服务 RunningBoard，主线程卡住后
  * launch、newContext、newPage 都不再返回，多个 Chrome 同时运行时更容易遇到（#37）。
- * launchPersistentContext 不能用：它在命令行末尾加了 about:blank，再加上关 App Nap 的参数，headless 模式会拒绝启动
+ * launchPersistentContext 不能用：它在命令行末尾加了 about:blank，再加上关 App Nap 的参数，headless 模式会拒绝启动。
+ * 和 Playwright fixture 一样让 V8 编译时就记下源码位置，见 withEagerSourcePositions
  */
-export const chromeLaunchOptions: LaunchOptions =
-  process.platform === 'darwin'
+export const chromeLaunchOptions: LaunchOptions = {
+  ...(process.platform === 'darwin'
     ? { executablePath: path.join(__dirname, 'chrome-no-app-nap.sh'), env: { ...process.env, WXA_CHROME_BINARY: CHROME } }
-    : { executablePath: CHROME };
+    : { executablePath: CHROME }),
+  args: withEagerSourcePositions()
+};
 
 export interface RunnerOptions {
   chromeArgs?: string[];
@@ -84,7 +88,7 @@ export async function startRunner(project: Record<string, string | object> | str
     ...options.extensions
   });
   const base = await server.start();
-  const browser = await chromium.launch({ ...chromeLaunchOptions, args: options.chromeArgs });
+  const browser = await chromium.launch({ ...chromeLaunchOptions, args: withEagerSourcePositions(options.chromeArgs) });
   const context = await browser.newContext({ permissions: options.permissions });
   const page = await context.newPage();
 
