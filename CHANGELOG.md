@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.12.1](https://github.com/open-wxa/wxa-runner/compare/v0.12.0...v0.12.1) (2026-11-01)
+
+
+### 问题修复
+
+* web-view 新窗口模式下刚打开窗口就改 src，网页偶尔停在原来的地址 ([#104](https://github.com/open-wxa/wxa-runner/issues/104)) ([9ccdf71](https://github.com/open-wxa/wxa-runner/commit/9ccdf71c396dc38a575bbf6ac8696add0fff5fe0))
+
 ## [0.12.0](https://github.com/open-wxa/wxa-runner/compare/v0.11.0...v0.12.0) (2026-10-30)
 
 
