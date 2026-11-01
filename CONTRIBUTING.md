@@ -41,10 +41,14 @@ node packages/cli/bin/wxa-runner.js dev examples/showcase --open   # 用源码�
 
 ## CI
 
-[.github/workflows/ci.yml](./.github/workflows/ci.yml) 跑 `pnpm lint`，并在 ubuntu-latest 上跑全部测试（`pnpm test` 和 `pnpm test:playwright`），
-测试前先确认编译器、基础库和 Chrome 都找得到：缺少时依赖它们的用例会自动跳过，CI 却显示通过。
+[.github/workflows/ci.yml](./.github/workflows/ci.yml) 跑 `pnpm lint`，并在多台 ubuntu-latest 机器上并行跑全部测试
+（`pnpm test` 分片和 `pnpm test:playwright`），测试前先确认编译器、基础库和 Chrome 都找得到：
+缺少时依赖它们的用例会自动跳过，CI 却显示通过。
 最后用 `node scripts/release.mjs --dry-run` 打包全部 npm 包，像外部用户一样在新目录里用 npm 安装，确认
 `wxa-runner dev` 能启动示例项目、用上内置基础库和 miniprogram-compiler。
+
+只改了文档（`**/*.md`、`docs/`）的 PR 会跳过 lint 和测试（必需检查照常上报，不会卡住合并）；
+同一个 PR 连着推送时只跑最新一次，旧的自动取消；推送到 main 的每次提交都完整跑一遍。
 
 ## 文档站点
 

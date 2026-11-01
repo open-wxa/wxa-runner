@@ -8,6 +8,11 @@ on:
   # release.yml 发布前先跑一遍
   workflow_call:
 
+# 同一个 PR 连着推几次时，只跑最新的那次，旧的直接取消；main 上的推送不取消，发版前要确保每个提交都完整跑过一遍
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # PR 里的提交信息和分支名要符合规范（本地的 commit-msg、pre-push hook 可以 --no-verify 跳过，这里兜底）
   conventions:
@@ -40,23 +45,41 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # 只改了文档（**/*.md、docs/）的 PR 不用跑 lint。
+      # 不能用 on.pull_request.paths 实现这个过滤：那样整个 workflow 不会触发，分支保护要求的必需检查
+      # （test、conventions）收不到上报，PR 会一直卡在 Expected 状态合不进去。所以在 job 内判断变更再跳过，检查照常上报
+      - id: changes
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - '!**/*.md'
+              - '!docs/**'
 
-      - uses: pnpm/action-setup@v4
+      - if: steps.changes.outputs.code != 'false'
+        uses: actions/checkout@v4
+
+      - if: steps.changes.outputs.code != 'false'
+        uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - if: steps.changes.outputs.code != 'false'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - if: steps.changes.outputs.code != 'false'
+        run: pnpm install --frozen-lockfile
 
-      - run: pnpm lint
+      - if: steps.changes.outputs.code != 'false'
+        run: pnpm lint
 
-  # 测试分到三台机器上并行跑：pnpm test 分成两片，Playwright 用例和打包检查单独一台。
-  # e2e 每个文件都要起 Chrome 和开发服务器，一台 4 核机器跑 2 个文件时 CPU 已经占满，同一台机器上加并发反而更慢
+  # 测试分到多台机器上并行跑：vitest 按 hash 分 4 片（再多半片也快不过 hmr.test.ts 这一个最慢的文件），
+  # Playwright 用例单独一台。e2e 每个文件都要起 Chrome 和开发服务器，一台 4 核机器跑 2 个文件时 CPU 已经占满，
+  # 同一台机器上加并发反而更慢，只能靠加机器
   test-part:
     name: test (${{ matrix.part }})
     # Linux 上没有微信开发者工具：编译器用 miniprogram-compiler 的 Linux 版，基础库用 @open-wxa/wxa-baselib
@@ -65,49 +88,69 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - part: vitest 1/2
-            shard: 1/2
-          - part: vitest 2/2
-            shard: 2/2
+          - part: vitest 1/4
+            shard: 1/4
+          - part: vitest 2/4
+            shard: 2/4
+          - part: vitest 3/4
+            shard: 3/4
+          - part: vitest 4/4
+            shard: 4/4
           - part: playwright
     env:
       # runner 镜像自带 Google Chrome
       WXA_CHROME: /usr/bin/google-chrome
     steps:
-      - uses: actions/checkout@v4
+      # 文档-only 的 PR 不跑测试（说明同 lint）。push 到 main、workflow_call 时这一步不跑，测试照常全跑
+      - id: changes
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - '!**/*.md'
+              - '!docs/**'
 
-      - uses: pnpm/action-setup@v4
+      - if: steps.changes.outputs.code != 'false'
+        uses: actions/checkout@v4
+
+      - if: steps.changes.outputs.code != 'false'
+        uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - if: steps.changes.outputs.code != 'false'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - if: steps.changes.outputs.code != 'false'
+        run: pnpm install --frozen-lockfile
 
-      - run: pnpm build
+      - if: steps.changes.outputs.code != 'false'
+        run: pnpm build
 
       # 找不到编译器、基础库或 Chrome 时，依赖它们的用例会自动跳过，CI 却显示通过，所以先确认都在
-      - name: Check compiler, base library and Chrome
+      - if: steps.changes.outputs.code != 'false'
         run: |
           node -e "console.log(require('./packages/compiler/dist').findCompilerBinaries())"
           node packages/cli/bin/wxa-runner.js baselib extract
           test -x "$WXA_CHROME"
 
-      - if: matrix.shard
+      - if: steps.changes.outputs.code != 'false' && matrix.shard
         run: pnpm test --shard=${{ matrix.shard }}
 
       # tests/playwright：用 Playwright fixture 写的用例
-      - if: matrix.part == 'playwright'
+      - if: steps.changes.outputs.code != 'false' && matrix.part == 'playwright'
         run: pnpm test:playwright
 
       # 打包全部 npm 包，像外部用户一样用 npm 安装到新目录，确认 wxa-runner dev 能启动、用上内置基础库
-      - if: matrix.part == 'playwright'
+      - if: steps.changes.outputs.code != 'false' && matrix.part == 'playwright'
         run: node scripts/release.mjs --dry-run
 
-  # 分支保护要求名为 test 的检查通过：三部分都通过才算通过
+  # 分支保护要求名为 test 的检查通过：五部分都通过才算通过。
+  # docs-only 的 PR 里 test-part 的检查步骤都被跳过、job 直接成功，这里也就照常放行
   test:
     needs: test-part
     if: always()
