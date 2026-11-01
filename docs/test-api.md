@@ -113,3 +113,4 @@ await page.goto('/');
 - 没有实现的 `wx` API 仍返回成功，以免打断业务代码，但会在 `errors()` 里记一条；基础库内部调用的原生接口不记。用到的要 mock 掉
 - `wx.request` 不能 mock，要用 `route` 或 setup 的 `network.routes` 拦截
 - 跳转后的选择器、text 组件的文字等，和用 fixture 时一样，见[在 Playwright 中测试](./testing.md#注意事项)
+
