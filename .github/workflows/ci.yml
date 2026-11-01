@@ -8,7 +8,8 @@ on:
   # release.yml 发布前先跑一遍
   workflow_call:
 
-# 同一个 PR 连着推几次时，只跑最新的那次，旧的直接取消；main 上的推送不取消，发版前要确保每个提交都完整跑过一遍
+# 同一个 PR 连着推几次时，只跑最新的那次，旧的直接取消；main 上的推送不取消，发版前要确保每个提交都完整跑过一遍。
+# release.yml 通过 workflow_call 复用本 workflow 时 event_name 不是 pull_request，同样不会取消
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
