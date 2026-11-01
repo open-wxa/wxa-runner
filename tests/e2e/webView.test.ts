@@ -239,8 +239,10 @@ describe.skipIf(!e2eReady)('web-view 新窗口模式', () => {
     await popup.waitForEvent('close');
 
     popup = await openWebPage(h5.origin + '/hello');
+    // 宿主离开时 win.close() 关窗口是异步的，open 返回时 Playwright 不一定已经收到关闭事件
+    const closed = popup.waitForEvent('close');
     await runner.open('/?path=pages/index/index');
-    expect(popup.isClosed()).toBe(true);
+    await closed;
   });
 });
 

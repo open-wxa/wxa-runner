@@ -140,7 +140,14 @@ interface WindowRecord {
   status: HTMLElement;
   src?: string;
   win: Window | null;
+  /** 新开的窗口还没加载出的初始地址和打开时间，加载出来（初始页面提交）后清空 */
+  opening?: { src: string; at: number };
+  /** 等初始页面提交后再跳转的定时器 */
+  retry?: number;
 }
+
+/** 初始页面一直不提交时（如地址返回 204、触发下载）最多等这么久，之后照常跳转 */
+const COMMIT_WAIT_MS = 5000;
 
 /**
  * 新窗口模式：web-view 的网页在新窗口里打开。网页是顶层页面，用真实域名，Cookie 不受跨站嵌入的限制。
@@ -244,14 +251,36 @@ export class WebViewWindows {
   private open(record: WindowRecord) {
     if (!record.src) return;
     if (record.win && !record.win.closed) {
-      // 用已有的引用跳转，不靠窗口名：网页可能改了自己的 window.name，按名字找不到时会多开一个窗口
-      record.win.location.href = record.src;
+      this.navigate(record);
     } else {
       const features = `popup,width=${this.device.screenWidth},height=${this.device.screenHeight}`;
       record.win = window.open(record.src, record.name, features);
-      if (record.win) notify('open', record.name, record.src);
+      if (record.win) {
+        record.opening = { src: record.src, at: Date.now() };
+        notify('open', record.name, record.src);
+      }
     }
     this.render(record);
+  }
+
+  /**
+   * 已打开的窗口跳到最新的 src。用已有的引用跳转，不靠窗口名：网页可能改了自己的 window.name，按名字找不到时会多开一个窗口。
+   *
+   * Chrome 里新窗口的初始页面还没提交时改它的地址，这次跳转偶尔会被丢掉，窗口停在原来的网页上（不经过 CDP 也一样）。
+   * 窗口刚打开就改 src 会碰上，所以等初始页面提交后再跳
+   */
+  private navigate(record: WindowRecord) {
+    const win = record.win;
+    if (!win || win.closed || !record.src || record.retry !== undefined) return;
+    if (record.opening && !committed(win, record.opening.src) && Date.now() - record.opening.at < COMMIT_WAIT_MS) {
+      record.retry = window.setTimeout(() => {
+        record.retry = undefined;
+        this.navigate(record);
+      }, 20);
+      return;
+    }
+    record.opening = undefined;
+    win.location.href = record.src;
   }
 
   private render(record: WindowRecord) {
@@ -277,7 +306,19 @@ function windowName(webviewId: number, htmlId: number): string {
   return `wxa-h5-${webviewId}-${htmlId}`;
 }
 
+/** 窗口的初始页面是否已提交：跨域的网页提交后读不到地址，同源的提交后地址不再是 about:blank */
+function committed(win: Window, src: string): boolean {
+  try {
+    return win.location.href !== 'about:blank' || src === 'about:blank';
+  } catch {
+    return true;
+  }
+}
+
 function close(record: WindowRecord) {
+  clearTimeout(record.retry);
+  record.retry = undefined;
+  record.opening = undefined;
   if (!record.win) return;
   record.win.close();
   record.win = null;
