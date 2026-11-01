@@ -22,7 +22,8 @@ on:
 permissions:
   contents: read
 
-# 同一个 PR 连着推几次时，只跑最新的构建，旧的直接取消；推送到 main 的部署不取消，依次排队
+# 同一个 PR 连着推几次时，只跑最新的构建，旧的直接取消。推送到 main 时不取消正在跑的运行；
+# 连着推送时排队中的运行会被更新的顶掉，只部署最新的文档
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

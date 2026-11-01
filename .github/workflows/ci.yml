@@ -8,10 +8,11 @@ on:
   # release.yml 发布前先跑一遍
   workflow_call:
 
-# 同一个 PR 连着推几次时，只跑最新的那次，旧的直接取消；main 上的推送不取消，发版前要确保每个提交都完整跑过一遍。
-# release.yml 通过 workflow_call 复用本 workflow 时 event_name 不是 pull_request，同样不会取消
+# 同一个 PR 连着推几次时，只跑最新的那次，旧的直接取消。
+# 其他事件（推送到 main、release.yml 的 workflow_call、手动运行）每次运行单独一组，互不影响：同一组里只能有一个运行在排队，
+# 新来的会把排队的那个顶掉，main 要是共用一组，连着合并几个 PR 时中间的提交就没测；发版前要确保每个提交都完整跑过一遍
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -46,13 +47,16 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      # 只改了文档（**/*.md、docs/）的 PR 不用跑 lint。
+      # 只改了文档（**/*.md、docs/ 下的文件）的 PR 不用跑 lint。
       # 不能用 on.pull_request.paths 实现这个过滤：那样整个 workflow 不会触发，分支保护要求的必需检查
-      # （test、conventions）收不到上报，PR 会一直卡在 Expected 状态合不进去。所以在 job 内判断变更再跳过，检查照常上报
+      # （test、conventions）收不到上报，PR 会一直卡在 Expected 状态合不进去。所以在 job 内判断变更再跳过，检查照常上报。
+      # predicate-quantifier: every 让一个文件同时满足两条排除规则才算文档；默认的 some 只要满足一条就算代码，
+      # 根目录的 README.md 会被 '!docs/**' 当成代码。不是 PR 的事件不跑这一步，code 输出为空，后面照常全跑
       - id: changes
         if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
+          predicate-quantifier: every
           filters: |
             code:
               - '!**/*.md'
@@ -102,56 +106,64 @@ jobs:
       # runner 镜像自带 Google Chrome
       WXA_CHROME: /usr/bin/google-chrome
     steps:
-      # 文档-only 的 PR 不跑测试（说明同 lint）。push 到 main、workflow_call 时这一步不跑，测试照常全跑
+      # 只改了文档的 PR 不跑测试（说明同 lint）。testedDocs 是测试会读的文档，改了照常跑测试：
+      # tests/unit/testApiDocs.test.ts 检查 docs/test-api.md 的表格没漏写测试 API 的成员
       - id: changes
         if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v3
         with:
+          predicate-quantifier: every
           filters: |
             code:
               - '!**/*.md'
               - '!docs/**'
+            testedDocs:
+              - 'docs/test-api.md'
 
-      - if: steps.changes.outputs.code != 'false'
+      # 不是 PR 的事件不跑上一步，两个输出都为空，skip 为 false，照常全跑
+      - id: scope
+        run: echo "skip=${{ steps.changes.outputs.code == 'false' && steps.changes.outputs.testedDocs == 'false' }}" >> "$GITHUB_OUTPUT"
+
+      - if: steps.scope.outputs.skip != 'true'
         uses: actions/checkout@v4
 
-      - if: steps.changes.outputs.code != 'false'
+      - if: steps.scope.outputs.skip != 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      - if: steps.changes.outputs.code != 'false'
+      - if: steps.scope.outputs.skip != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
-      - if: steps.changes.outputs.code != 'false'
+      - if: steps.scope.outputs.skip != 'true'
         run: pnpm install --frozen-lockfile
 
-      - if: steps.changes.outputs.code != 'false'
+      - if: steps.scope.outputs.skip != 'true'
         run: pnpm build
 
       # 找不到编译器、基础库或 Chrome 时，依赖它们的用例会自动跳过，CI 却显示通过，所以先确认都在
-      - if: steps.changes.outputs.code != 'false'
+      - if: steps.scope.outputs.skip != 'true'
         run: |
           node -e "console.log(require('./packages/compiler/dist').findCompilerBinaries())"
           node packages/cli/bin/wxa-runner.js baselib extract
           test -x "$WXA_CHROME"
 
-      - if: steps.changes.outputs.code != 'false' && matrix.shard
+      - if: steps.scope.outputs.skip != 'true' && matrix.shard
         run: pnpm test --shard=${{ matrix.shard }}
 
       # tests/playwright：用 Playwright fixture 写的用例
-      - if: steps.changes.outputs.code != 'false' && matrix.part == 'playwright'
+      - if: steps.scope.outputs.skip != 'true' && matrix.part == 'playwright'
         run: pnpm test:playwright
 
       # 打包全部 npm 包，像外部用户一样用 npm 安装到新目录，确认 wxa-runner dev 能启动、用上内置基础库
-      - if: steps.changes.outputs.code != 'false' && matrix.part == 'playwright'
+      - if: steps.scope.outputs.skip != 'true' && matrix.part == 'playwright'
         run: node scripts/release.mjs --dry-run
 
   # 分支保护要求名为 test 的检查通过：五部分都通过才算通过。
-  # docs-only 的 PR 里 test-part 的检查步骤都被跳过、job 直接成功，这里也就照常放行
+  # 只改了文档的 PR 里 test-part 的检查步骤都被跳过、job 直接成功，这里也就照常放行
   test:
     needs: test-part
     if: always()

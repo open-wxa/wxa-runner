@@ -47,7 +47,8 @@ node packages/cli/bin/wxa-runner.js dev examples/showcase --open   # 用源码�
 最后用 `node scripts/release.mjs --dry-run` 打包全部 npm 包，像外部用户一样在新目录里用 npm 安装，确认
 `wxa-runner dev` 能启动示例项目、用上内置基础库和 miniprogram-compiler。
 
-只改了文档（`**/*.md`、`docs/`）的 PR 会跳过 lint 和测试（必需检查照常上报，不会卡住合并）；
+只改了文档（`**/*.md`、`docs/`）的 PR 会跳过 lint 和测试（必需检查照常上报，不会卡住合并），
+测试会读的文档（`docs/test-api.md`）除外；
 同一个 PR 连着推送时只跑最新一次，旧的自动取消；推送到 main 的每次提交都完整跑一遍。
 
 ## 文档站点
