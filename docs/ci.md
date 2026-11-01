@@ -7,7 +7,7 @@ description: 不装微信开发者工具，在 GitHub Actions 的 Linux 机器�
 # 在 CI 里跑小程序 E2E 测试
 
 微信开发者工具只有 Windows、macOS 版，靠它跑自动化测试，CI 要准备一台装好开发者工具的机器。
-wxa-runner 不需要：它用随依赖安装的内置基础库 3.7.0 和微信官方 npm 包 `miniprogram-compiler` 里的编译器，在 GitHub Actions 的 Linux 机器上无头运行。wxa-runner 自己的测试也这样跑。
+wxa-runner 不需要：它用随依赖安装的内置基础库 3.7.0 和微信官方 npm 包 `miniprogram-compiler` 里的编译器，在 GitHub Actions 的 Linux 机器上无头运行。wxa-runner 自己的测试也这样跑，可以参考本仓库的 [.github/workflows/ci.yml](https://github.com/open-wxa/wxa-runner/blob/main/.github/workflows/ci.yml)。
 
 ## 准备
 
