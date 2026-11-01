@@ -82,9 +82,11 @@ jobs:
       - if: steps.changes.outputs.code != 'false'
         run: pnpm lint
 
-  # 测试分到多台机器上并行跑：vitest 按 hash 分 4 片（再多半片也快不过 hmr.test.ts 这一个最慢的文件，
-  # 实测四片 56~63s，正好都卡在这个地板附近），Playwright 用例单独一台。e2e 每个文件都要起 Chrome 和开发服务器，
-  # 一台 4 核机器跑 2 个文件时 CPU 已经占满，同一台机器上加并发反而更慢，只能靠加机器
+  # 测试分到多台机器上并行跑。e2e 每个文件都要起 Chrome 和开发服务器，一台 4 核机器跑 2 个文件时 CPU 已经占满，
+  # 同一台机器上加并发反而更慢，只能靠加机器。
+  # vitest 1.6 的 --shard 在每个进程池（e2e 一个、其余一个）里按文件路径的 sha1 排序后连续切块，不看耗时，
+  # 增删、重命名测试文件都会重新洗牌；分 5 片时按 CI 实测的单文件耗时估算，最慢的一片测试约 35s。
+  # 单个文件只能在一台机器上跑，所以很慢的文件要拆开（热更新的用例就按主题分在了 hmrView、hmrLogic、hmrReload 三个文件里）
   test-part:
     name: test (${{ matrix.part }})
     # Linux 上没有微信开发者工具：编译器用 miniprogram-compiler 的 Linux 版，基础库用 @open-wxa/wxa-baselib
@@ -93,15 +95,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - part: vitest 1/4
-            shard: 1/4
-          - part: vitest 2/4
-            shard: 2/4
-          - part: vitest 3/4
-            shard: 3/4
-          - part: vitest 4/4
-            shard: 4/4
-          - part: playwright
+          - { part: vitest 1/5, vitest: 1/5 }
+          - { part: vitest 2/5, vitest: 2/5 }
+          - { part: vitest 3/5, vitest: 3/5 }
+          - { part: vitest 4/5, vitest: 4/5 }
+          - { part: vitest 5/5, vitest: 5/5 }
+          # tests/playwright 开了 fullyParallel，按用例分片，两片很均衡
+          - { part: playwright 1/2, playwright: 1/2 }
+          - { part: playwright 2/2, playwright: 2/2 }
+          - { part: pack, pack: true }
     env:
       # runner 镜像自带 Google Chrome
       WXA_CHROME: /usr/bin/google-chrome
@@ -151,18 +153,19 @@ jobs:
           node packages/cli/bin/wxa-runner.js baselib extract
           test -x "$WXA_CHROME"
 
-      - if: steps.scope.outputs.skip != 'true' && matrix.shard
-        run: pnpm test --shard=${{ matrix.shard }}
+      - if: steps.scope.outputs.skip != 'true' && matrix.vitest
+        run: pnpm test --shard=${{ matrix.vitest }}
 
       # tests/playwright：用 Playwright fixture 写的用例
-      - if: steps.scope.outputs.skip != 'true' && matrix.part == 'playwright'
-        run: pnpm test:playwright
+      - if: steps.scope.outputs.skip != 'true' && matrix.playwright
+        run: pnpm test:playwright --shard=${{ matrix.playwright }}
 
-      # 打包全部 npm 包，像外部用户一样用 npm 安装到新目录，确认 wxa-runner dev 能启动、用上内置基础库
-      - if: steps.scope.outputs.skip != 'true' && matrix.part == 'playwright'
+      # 打包全部 npm 包，像外部用户一样用 npm 安装到新目录，确认 wxa-runner dev 能启动、用上内置基础库。
+      # 单独一台：放在哪台测试机器上都会让那台成为最慢的一台
+      - if: steps.scope.outputs.skip != 'true' && matrix.pack
         run: node scripts/release.mjs --dry-run
 
-  # 分支保护要求名为 test 的检查通过：五部分都通过才算通过。
+  # 分支保护要求名为 test 的检查通过：test-part 的每一台都通过才算通过。
   # 只改了文档的 PR 里 test-part 的检查步骤都被跳过、job 直接成功，这里也就照常放行
   test:
     needs: test-part
