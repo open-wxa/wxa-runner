@@ -8,6 +8,13 @@ on:
   # release.yml 发布前先跑一遍
   workflow_call:
 
+# 同一个 PR 连着推几次时，只跑最新的那次，旧的直接取消。
+# 其他事件（推送到 main、release.yml 的 workflow_call、手动运行）每次运行单独一组，互不影响：同一组里只能有一个运行在排队，
+# 新来的会把排队的那个顶掉，main 要是共用一组，连着合并几个 PR 时中间的提交就没测；发版前要确保每个提交都完整跑过一遍
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # PR 里的提交信息和分支名要符合规范（本地的 commit-msg、pre-push hook 可以 --no-verify 跳过，这里兜底）
   conventions:
@@ -40,23 +47,46 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # 只改了文档（**/*.md、docs/ 下的文件）的 PR 不用跑 lint。
+      # 不能用 on.pull_request.paths 实现这个过滤：那样整个 workflow 不会触发，分支保护要求的必需检查
+      # （test、conventions）收不到上报，PR 会一直卡在 Expected 状态合不进去。所以在 job 内判断变更再跳过，检查照常上报。
+      # predicate-quantifier: every 让一个文件同时满足两条排除规则才算文档；默认的 some 只要满足一条就算代码，
+      # 根目录的 README.md 会被 '!docs/**' 当成代码。不是 PR 的事件不跑这一步，code 输出为空，后面照常全跑
+      - id: changes
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '!**/*.md'
+              - '!docs/**'
 
-      - uses: pnpm/action-setup@v4
+      - if: steps.changes.outputs.code != 'false'
+        uses: actions/checkout@v4
+
+      - if: steps.changes.outputs.code != 'false'
+        uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - if: steps.changes.outputs.code != 'false'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - if: steps.changes.outputs.code != 'false'
+        run: pnpm install --frozen-lockfile
 
-      - run: pnpm lint
+      - if: steps.changes.outputs.code != 'false'
+        run: pnpm lint
 
-  # 测试分到三台机器上并行跑：pnpm test 分成两片，Playwright 用例和打包检查单独一台。
-  # e2e 每个文件都要起 Chrome 和开发服务器，一台 4 核机器跑 2 个文件时 CPU 已经占满，同一台机器上加并发反而更慢
+  # 测试分到多台机器上并行跑。e2e 每个文件都要起 Chrome 和开发服务器，一台 4 核机器跑 2 个文件时 CPU 已经占满，
+  # 同一台机器上加并发反而更慢，只能靠加机器。
+  # vitest 1.6 的 --shard 在每个进程池（e2e 一个、其余一个）里按文件路径的 sha1 排序后连续切块，不看耗时，
+  # 增删、重命名测试文件都会重新洗牌；分 5 片时按 CI 实测的单文件耗时估算，最慢的一片测试约 35s。
+  # 单个文件只能在一台机器上跑，所以很慢的文件要拆开（热更新的用例就按主题分在了 hmrView、hmrLogic、hmrReload 三个文件里）
   test-part:
     name: test (${{ matrix.part }})
     # Linux 上没有微信开发者工具：编译器用 miniprogram-compiler 的 Linux 版，基础库用 @open-wxa/wxa-baselib
@@ -65,49 +95,80 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - part: vitest 1/2
-            shard: 1/2
-          - part: vitest 2/2
-            shard: 2/2
-          - part: playwright
+          - { part: vitest 1/5, vitest: 1/5 }
+          - { part: vitest 2/5, vitest: 2/5 }
+          - { part: vitest 3/5, vitest: 3/5 }
+          - { part: vitest 4/5, vitest: 4/5 }
+          - { part: vitest 5/5, vitest: 5/5 }
+          # tests/playwright 开了 fullyParallel，按用例分片，两片很均衡
+          - { part: playwright 1/2, playwright: 1/2 }
+          - { part: playwright 2/2, playwright: 2/2 }
+          - { part: pack, pack: true }
     env:
       # runner 镜像自带 Google Chrome
       WXA_CHROME: /usr/bin/google-chrome
     steps:
-      - uses: actions/checkout@v4
+      # 只改了文档的 PR 不跑测试（说明同 lint）。testedDocs 是测试会读的文档，改了照常跑测试：
+      # tests/unit/testApiDocs.test.ts 检查 docs/test-api.md 的表格没漏写测试 API 的成员
+      - id: changes
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - '!**/*.md'
+              - '!docs/**'
+            testedDocs:
+              - 'docs/test-api.md'
 
-      - uses: pnpm/action-setup@v4
+      # 不是 PR 的事件不跑上一步，两个输出都为空，skip 为 false，照常全跑
+      - id: scope
+        run: echo "skip=${{ steps.changes.outputs.code == 'false' && steps.changes.outputs.testedDocs == 'false' }}" >> "$GITHUB_OUTPUT"
+
+      - if: steps.scope.outputs.skip != 'true'
+        uses: actions/checkout@v4
+
+      - if: steps.scope.outputs.skip != 'true'
+        uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - if: steps.scope.outputs.skip != 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
-      - run: pnpm install --frozen-lockfile
+      - if: steps.scope.outputs.skip != 'true'
+        run: pnpm install --frozen-lockfile
 
-      - run: pnpm build
+      # 生成类型声明占了构建的大部分时间（CI 上 10s 以上），测试用不到，只在打包那台生成。
+      # 它也是 CI 里唯一的类型检查（oxlint 不查类型），类型错误由打包那台报出来
+      - if: steps.scope.outputs.skip != 'true'
+        run: pnpm build ${{ !matrix.pack && '--no-dts' || '' }}
 
       # 找不到编译器、基础库或 Chrome 时，依赖它们的用例会自动跳过，CI 却显示通过，所以先确认都在
-      - name: Check compiler, base library and Chrome
+      - if: steps.scope.outputs.skip != 'true'
         run: |
           node -e "console.log(require('./packages/compiler/dist').findCompilerBinaries())"
           node packages/cli/bin/wxa-runner.js baselib extract
           test -x "$WXA_CHROME"
 
-      - if: matrix.shard
-        run: pnpm test --shard=${{ matrix.shard }}
+      - if: steps.scope.outputs.skip != 'true' && matrix.vitest
+        run: pnpm test --shard=${{ matrix.vitest }}
 
       # tests/playwright：用 Playwright fixture 写的用例
-      - if: matrix.part == 'playwright'
-        run: pnpm test:playwright
+      - if: steps.scope.outputs.skip != 'true' && matrix.playwright
+        run: pnpm test:playwright --shard=${{ matrix.playwright }}
 
-      # 打包全部 npm 包，像外部用户一样用 npm 安装到新目录，确认 wxa-runner dev 能启动、用上内置基础库
-      - if: matrix.part == 'playwright'
+      # 打包全部 npm 包，像外部用户一样用 npm 安装到新目录，确认 wxa-runner dev 能启动、用上内置基础库。
+      # 单独一台：放在哪台测试机器上都会让那台成为最慢的一台
+      - if: steps.scope.outputs.skip != 'true' && matrix.pack
         run: node scripts/release.mjs --dry-run
 
-  # 分支保护要求名为 test 的检查通过：三部分都通过才算通过
+  # 分支保护要求名为 test 的检查通过：test-part 的每一台都通过才算通过。
+  # 只改了文档的 PR 里 test-part 的检查步骤都被跳过、job 直接成功，这里也就照常放行
   test:
     needs: test-part
     if: always()
