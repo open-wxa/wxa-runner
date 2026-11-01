@@ -143,8 +143,10 @@ jobs:
       - if: steps.scope.outputs.skip != 'true'
         run: pnpm install --frozen-lockfile
 
+      # 生成类型声明占了构建的大部分时间（CI 上 10s 以上），测试用不到，只在打包那台生成。
+      # 它也是 CI 里唯一的类型检查（oxlint 不查类型），类型错误由打包那台报出来
       - if: steps.scope.outputs.skip != 'true'
-        run: pnpm build
+        run: pnpm build ${{ !matrix.pack && '--no-dts' || '' }}
 
       # 找不到编译器、基础库或 Chrome 时，依赖它们的用例会自动跳过，CI 却显示通过，所以先确认都在
       - if: steps.scope.outputs.skip != 'true'
