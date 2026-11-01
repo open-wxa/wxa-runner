@@ -50,3 +50,4 @@ npx wxa-runner dev ./dist/dev/mp-weixin   # 原生小程序目录，或 uni-app 
 ## 许可证
 
 [MIT](./LICENSE)。内置基础库 [wxa-baselib](https://github.com/open-wxa/wxa-baselib) 是微信官方代码，版权归腾讯所有，不适用本项目的 MIT 协议。
+
