@@ -18,6 +18,7 @@
  *   /__wxa__/usr/<会话>/<路径>   用户目录（USER_DATA_PATH）下的文件，image 等组件和 uploadFile 按地址读取
  *   /__wxa__/region/<kind>     地区选择器用的行政区划数据（districts / streets），取自本机开发者工具
  *   /__wxa__/api/*             --devtools-login：wx.login 的 code、手机号，服务市场、插件的请求转发，只允许本机访问
+ *   /__wxa__/socket            带自定义请求头的 WebSocket 转发，只接受同源连接
  *   /__wxa__/ws                文件变化通知：热更新（hot）或整页刷新（reload）；开启 forwardConsole 时浏览器从这里发来报错
  *   middlewares / 扩展挂载的路径  排在 runner 自己的路由之前
  *   其余路径                    小程序目录下的静态资源
@@ -43,6 +44,7 @@ import { AppSource, DEFAULT_DEVICE, routeApp } from './appRoutes';
 import { ignoreListSourceMap } from './ignoreList';
 import { ignoreConsoleHook, printBrowserReports } from './forwardConsole';
 import { handleProxy } from './proxy';
+import { createSocketProxy } from './socketProxy';
 import { planHotUpdate } from './hmr';
 import { developerTicketSource, TicketSource } from './developerTicket';
 import { AppBuild, PluginStore } from './plugins';
@@ -142,6 +144,7 @@ export class DevServer {
   private readonly logger: Pick<Console, 'log' | 'warn' | 'error'>;
   private readonly app: Express;
   private server: http.Server | null = null;
+  private socketProxy: WebSocketServer | null = null;
   private sockets: WebSocketServer | null = null;
   private watcher: ProjectWatcher | null = null;
   private address = '';
@@ -219,7 +222,12 @@ export class DevServer {
       socket.on('error', () => undefined);
       if (this.options.forwardConsole) printBrowserReports(socket, this.logger);
     });
+    this.socketProxy = createSocketProxy();
     server.on('upgrade', (req, socket, head) => {
+      if (req.url === '/__wxa__/socket') {
+        this.socketProxy!.handleUpgrade(req, socket, head, ws => this.socketProxy!.emit('connection', ws, req));
+        return;
+      }
       if (req.url?.startsWith('/__wxa__/ws')) {
         this.sockets!.handleUpgrade(req, socket, head, ws => this.sockets!.emit('connection', ws, req));
       } else {
@@ -245,6 +253,8 @@ export class DevServer {
     await this.watcher?.close();
     this.sockets?.clients.forEach(client => client.terminate());
     this.sockets?.close();
+    this.socketProxy?.clients.forEach(client => client.terminate());
+    this.socketProxy?.close();
     const server = this.server;
     this.server = null;
     if (server) {
@@ -281,6 +291,7 @@ export class DevServer {
         baseLibVersion: this.baseLib.version,
         device: this.device,
         devtoolsLogin: this.devtoolsLogin,
+        socketProxy: true,
         forwardConsole: this.options.forwardConsole ?? false,
         webViewWindow: this.options.webViewWindow ?? false
       };

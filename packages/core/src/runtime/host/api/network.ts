@@ -15,9 +15,12 @@ import type { MockedResponse, RequestRoutes } from './routes';
 import { saveTempFile, tempFileType } from './tempFiles';
 
 export interface NetworkApiOptions {
+  /** 开发服务器是否支持同源 WebSocket 代理 */
+  socketProxy?: boolean;
   /** 向逻辑层派发事件 */
   emit: (event: string, data: Record<string, unknown>) => void;
   defaultTimeout: () => number;
+  defaultSocketTimeout?: () => number;
   /** 请求拦截，只作用于 wx.request */
   routes?: RequestRoutes;
   /** wx.request 发出时调用，早于拦截和转发 */
@@ -65,6 +68,7 @@ let taskSeq = 0;
 export function createNetworkApis(options: NetworkApiOptions): Record<string, ApiHandler> {
   const controllers = new Map<string, AbortController>();
   const sockets = new Map<string, WebSocket>();
+  const pendingSockets = new Set<string>();
   const { emit } = options;
 
   const startTask = (args: any, run: (signal: AbortSignal, id: string) => Promise<void>): string => {
@@ -197,17 +201,39 @@ export function createNetworkApis(options: NetworkApiOptions): Record<string, Ap
     const socketTaskId = String(++taskSeq);
     let socket: WebSocket;
     try {
-      socket = new WebSocket(args.url, args.protocols && args.protocols.length ? args.protocols : undefined);
+      if (options.socketProxy) {
+        const url = new URL('/__wxa__/socket', location.href);
+        url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        socket = new WebSocket(url);
+        pendingSockets.add(socketTaskId);
+      } else socket = new WebSocket(args.url, args.protocols && args.protocols.length ? args.protocols : undefined);
     } catch (error) {
       return fail(api, reason(error));
     }
     socket.binaryType = 'arraybuffer';
     sockets.set(socketTaskId, socket);
-    socket.onopen = () => emit('onSocketTaskStateChange', { socketTaskId, state: 'open', header: {}, profile: {} });
-    socket.onmessage = event => emit('onSocketTaskStateChange', { socketTaskId, state: 'message', data: event.data });
-    socket.onerror = () => emit('onSocketTaskStateChange', { socketTaskId, state: 'error', errMsg: 'connectSocket:fail' });
+    let failed = false;
+    const onError = () => {
+      failed = true;
+      emit('onSocketTaskStateChange', { socketTaskId, state: 'error', errMsg: 'connectSocket:fail' });
+    };
+    socket.onopen = () => {
+      if (options.socketProxy) socket.send(JSON.stringify({
+        url: args.url, header: args.header, protocols: args.protocols, timeout: args.timeout || options.defaultSocketTimeout?.() || 60000
+      }));
+      else emit('onSocketTaskStateChange', { socketTaskId, state: 'open', header: {}, profile: {} });
+    };
+    socket.onmessage = event => {
+      if (pendingSockets.has(socketTaskId)) {
+        const result = JSON.parse(event.data);
+        pendingSockets.delete(socketTaskId);
+        emit('onSocketTaskStateChange', { socketTaskId, state: 'open', header: result.header, profile: {} });
+      } else emit('onSocketTaskStateChange', { socketTaskId, state: 'message', data: event.data });
+    };
+    socket.onerror = onError;
     socket.onclose = event => {
       sockets.delete(socketTaskId);
+      if (pendingSockets.delete(socketTaskId) && !failed) onError();
       emit('onSocketTaskStateChange', { socketTaskId, state: 'close', code: event.code, reason: event.reason });
     };
     return ok(api, { socketTaskId });
@@ -217,7 +243,7 @@ export function createNetworkApis(options: NetworkApiOptions): Record<string, Ap
     const socket = sockets.get(String(args.socketTaskId));
     if (!socket) return fail(api, 'socket task not found');
     if (args.operationType === 'send') {
-      if (socket.readyState !== WebSocket.OPEN) return fail(api, 'socket is not open');
+      if (pendingSockets.has(String(args.socketTaskId)) || socket.readyState !== WebSocket.OPEN) return fail(api, 'socket is not open');
       socket.send(args.data);
     } else if (args.operationType === 'close') {
       socket.close(args.code || 1000, args.reason);

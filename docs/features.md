@@ -39,11 +39,13 @@ wxa-runner 用来本地调试和跑自动化测试，发布相关的事仍然在
 | 界面 | 导航栏、tabBar（包括自定义 tabBar）、toast / modal / actionSheet，默认模拟 iPhone X |
 | 组件 | picker、canvas、camera、video、map（需要联网）、web-view |
 | 媒体 | chooseImage、chooseMedia（图片和视频）、chooseVideo 由浏览器选文件，previewImage、getImageInfo，保存到相册即下载；InnerAudioContext 播放音频 |
-| 网络 | request、上传、下载由开发服务器转发（没有跨域限制），WebSocket |
+| 网络 | request、上传、下载由开发服务器转发（没有跨域限制）；WebSocket 经开发服务器转发，支持自定义请求头、子协议和二进制消息 |
 | 存储 | Storage、FileSystemManager 基本操作 |
 | 登录、用户信息等开放接口 | 返回固定的假数据，支付、扫码默认失败，[默认返回什么](./setup.md#mock)。可以用 setup mock，或用[借用开发者工具登录态](./devtools-login.md)拿真实的 code。服务市场 `wx.serviceMarket` 要加 `--devtools-login` 才能调用，见[服务市场](./devtools-login.md#服务市场) |
 
 基础库已验证 2.32.3、3.3.4、3.5.8、3.7.0；3.7.1 和 3.8.8 上全部测试也通过，但默认不会选用，见下文。
+
+开发服务器会转发 `wx.connectSocket({ header })` 中的鉴权头；上游握手成功后才触发 `onOpen`，失败触发 `onError` / `onClose`。请求头通过同源连接的首帧传递，不放入 URL。静态查看器没有此代理，仍使用浏览器直连，不能携带自定义请求头。
 
 ## less / sass
 
