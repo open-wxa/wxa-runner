@@ -1,5 +1,13 @@
 # 更新日志
 
+## [0.12.2](https://github.com/open-wxa/wxa-runner/compare/v0.12.1...v0.12.2) (2026-11-02)
+
+
+### 问题修复
+
+* 实现文件系统 rename 和 renameSync ([#106](https://github.com/open-wxa/wxa-runner/issues/106)) ([8830a42](https://github.com/open-wxa/wxa-runner/commit/8830a42e941747571a68df9ba01c9f24b697f65c))
+* 通过开发服务器转发 WebSocket 自定义请求头 ([#107](https://github.com/open-wxa/wxa-runner/issues/107)) ([09e9b64](https://github.com/open-wxa/wxa-runner/commit/09e9b6465e7b1062ccef031f150d47e629a09d38))
+
 ## [0.12.1](https://github.com/open-wxa/wxa-runner/compare/v0.12.0...v0.12.1) (2026-11-01)
 
 
