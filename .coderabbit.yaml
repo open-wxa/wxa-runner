@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: zh-CN
+reviews:
+  profile: chill            # 少挑风格问题，多关注 bug
+  high_level_summary: true
+  auto_review:
+    ignore_title_keywords:
+      - "chore: release"    # release-please 自动生成的发版 PR 不审
+  path_filters:
+    - "!pnpm-lock.yaml"
+    - "!CHANGELOG.md"
+    - "!**/*.png"
+    - "!**/*.mp4"
+  path_instructions:
+    - path: "tests/**"
+      instructions: "测试只断言可观察行为，不断言内部实现；e2e 依赖开发者工具、基础库或 Chrome，找不到时用 describe.skipIf 跳过。"
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - "CONTRIBUTING.md"   # 仓库没有 AGENTS.md/CLAUDE.md，用贡献指南作为审查规范
