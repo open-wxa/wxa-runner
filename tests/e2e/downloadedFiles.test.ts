@@ -145,6 +145,16 @@ describe.skipIf(!e2eReady)('下载文件的二进制读取与用户目录复制'
     expect(await runner.page.evaluate(() => window.__wxa_test_api__.errors())).toEqual([]);
   });
 
+  it('rename 把下载得到的临时文件移到用户目录后，新地址可读，临时文件地址失效', async () => {
+    await runner.open('/?path=pages/index/index');
+    const oldPath = await download();
+    const newPath = (await call('userPath')) + '/cover.bin';
+    expect(await call('callFs', 'rename', { oldPath, newPath })).toMatchObject({ errMsg: 'rename:ok' });
+    expect(await runner.page.evaluate(async path => [...new Uint8Array(await (await fetch(path)).arrayBuffer())], newPath)).toEqual([...bytes]);
+    expect(await runner.page.evaluate(async path => (await fetch(path)).status, oldPath)).toBe(404);
+    expect(await call('read', newPath)).toEqual({ data: [...bytes] });
+  });
+
   it('普通用户文件写入后，unlink 必须真正删除同一份文件', async () => {
     await runner.open('/?path=pages/index/index');
     const filePath = (await call('userPath')) + '/note.txt';

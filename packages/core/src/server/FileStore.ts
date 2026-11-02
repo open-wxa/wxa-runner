@@ -199,10 +199,9 @@ export class FileStore {
     rename: ({ oldPath, newPath }) => {
       const source = this.normalize(oldPath);
       const target = this.normalize(newPath);
-      const node = this.existing(source);
+      const node = this.existing(oldPath);
       this.assertNotRoot(source);
       this.assertNotRoot(target);
-      if (source === '/' || target === '/') throw new Error('operation not permitted');
       if (source === target) return {};
       const parent = target.slice(0, target.lastIndexOf('/')) || '/';
       if (!this.nodes.get(parent)?.dir) throw new Error(`no such file or directory ${newPath}`);

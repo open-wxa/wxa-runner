@@ -124,4 +124,11 @@ describe('FileStore 重命名', () => {
     expect(store.stat('/usr/source')).toBeDefined();
     expect(store.stat('/usr/full/child')).toBeDefined();
   });
+
+  it('源文件不存在时，报错里是调用方传入的路径', () => {
+    const store = new FileStore(['/usr']);
+    expect(() => store.execute('rename', { oldPath: 'http://localhost/usr/missing', newPath: '/usr/target' })).toThrow(
+      'no such file or directory http://localhost/usr/missing'
+    );
+  });
 });
