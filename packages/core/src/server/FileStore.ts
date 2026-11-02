@@ -196,6 +196,27 @@ export class FileStore {
       this.write(destPath, this.read(srcPath));
       return {};
     },
+    rename: ({ oldPath, newPath }) => {
+      const source = this.normalize(oldPath);
+      const target = this.normalize(newPath);
+      const node = this.existing(oldPath);
+      this.assertNotRoot(source);
+      this.assertNotRoot(target);
+      if (source === target) return {};
+      const parent = target.slice(0, target.lastIndexOf('/')) || '/';
+      if (!this.nodes.get(parent)?.dir) throw new Error(`no such file or directory ${newPath}`);
+      if (node.dir && target.startsWith(source + '/')) throw new Error('invalid argument: directory moved into itself');
+      const destination = this.nodes.get(target);
+      if (destination) {
+        if (destination.dir !== node.dir) throw new Error(`incompatible file type ${newPath}`);
+        if (destination.dir && this.readdir(target).length) throw new Error(`directory not empty ${newPath}`);
+      }
+      // 先验证所有条件，再一次性移动节点；不经复制/删除，保留内容、时间和 ETag。
+      const entries = [...this.nodes].filter(([key]) => key === source || (node.dir && key.startsWith(source + '/')));
+      for (const [key] of entries) this.nodes.delete(key);
+      for (const [key, value] of entries) this.nodes.set(target + key.slice(source.length), value);
+      return {};
+    },
     access: ({ path }) => {
       this.existing(path);
       return {};

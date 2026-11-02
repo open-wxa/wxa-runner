@@ -47,6 +47,7 @@ export function createFileSystemApis(request: FileRequest = requestFile): Record
     'rmdir',
     'getFileInfo',
     'copyFile',
+    'rename',
     'readFile'
   ]) {
     const handler: ApiHandler = (args, { api }) => {
