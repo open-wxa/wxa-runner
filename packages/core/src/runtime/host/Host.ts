@@ -592,6 +592,8 @@ export class Host implements HostApi {
         screenTop: () => this.shell.screenTop()
       }),
       ...createNetworkApis({
+        socketProxy: this.info.socketProxy,
+        defaultSocketTimeout: () => this.info.wxConfig.networkTimeout?.connectSocket || 60000,
         emit: (event, data) => this.emitToService(event, data),
         defaultTimeout: () => this.info.wxConfig.networkTimeout?.request || 60000,
         routes: this.routes,

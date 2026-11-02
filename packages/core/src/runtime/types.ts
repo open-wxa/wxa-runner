@@ -59,6 +59,8 @@ export interface AppInfo {
   device: DeviceProfile;
   /** 开启了 --devtools-login */
   devtoolsLogin?: boolean;
+  /** 开发服务器提供 WebSocket 请求头转发；静态查看器未提供时保持直连 */
+  socketProxy?: boolean;
   /** false 表示没有开发服务器，不建立热更新和报错转发连接 */
   liveReload?: boolean;
   /** 使用查看器已经注册的 Service Worker，宿主不能用 sw.js 替换它 */
