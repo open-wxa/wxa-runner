@@ -1,5 +1,7 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 language: zh-CN
+# language 只管审查正文；对话里有人用英文提问时也用中文回复
+tone_instructions: "始终使用简体中文回复，包括审查意见、总结和对话；代码、命令、文件路径和标识符保持原样。"
 reviews:
   profile: chill            # 少挑风格问题，多关注 bug
   high_level_summary: true
@@ -11,9 +13,14 @@ reviews:
     - "!CHANGELOG.md"
     - "!**/*.png"
     - "!**/*.mp4"
+    - "!**/*.webm"
   path_instructions:
     - path: "tests/**"
-      instructions: "测试只断言可观察行为，不断言内部实现；e2e 依赖开发者工具、基础库或 Chrome，找不到时用 describe.skipIf 跳过。"
+      instructions: "测试只断言可观察行为，不断言内部实现。"
+    - path: "tests/{unit,integration,e2e}/**"
+      instructions: "依赖开发者工具、编译器、基础库或 Chrome 的用例，找不到时用 describe.skipIf 跳过。"
+    - path: "tests/playwright/**"
+      instructions: "这里用 Playwright test runner，找不到依赖时直接报错，不要建议改成跳过。"
 knowledge_base:
   code_guidelines:
     filePatterns:
