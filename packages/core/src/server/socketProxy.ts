@@ -4,7 +4,15 @@
  */
 import { WebSocket, WebSocketServer, type VerifyClientCallbackSync } from 'ws';
 
-const closeCode = (code: number) => ([1005, 1006, 1015].includes(code) ? 1011 : code);
+/**
+ * 把一端的关闭原样转给另一端，小程序看到的关闭码和浏览器直连时一致。
+ * 1005、1006、1015 不能写进关闭帧：不带关闭码的 close() 到对端就是 1005，terminate() 到对端就是 1006
+ */
+function mirrorClose(to: WebSocket, code: number, reason: Buffer) {
+  if (code === 1005) to.close();
+  else if (code === 1006 || code === 1015) to.terminate();
+  else to.close(code, reason);
+}
 
 export function createSocketProxy(): WebSocketServer {
   const server = new WebSocketServer({
@@ -50,15 +58,17 @@ export function createSocketProxy(): WebSocketServer {
       client.on('message', (message, isBinary) => {
         if (socket.readyState === WebSocket.OPEN) socket.send(message, { binary: isBinary });
       });
-      socket.on('error', () => client.close(1011, 'Upstream socket failed'));
+      // 握手被拒、超时和连接中断，直连时浏览器看到的都是 1006
+      socket.on('error', () => client.terminate());
       socket.on('close', (code, reason) => {
-        if (client.readyState === WebSocket.OPEN) client.close(closeCode(code), reason);
+        if (client.readyState === WebSocket.OPEN) mirrorClose(client, code, reason);
       });
     });
     client.on('close', (code, reason) => {
       clearTimeout(timer);
-      if (upstream?.readyState === WebSocket.OPEN) upstream.close(closeCode(code), reason);
-      else if (upstream?.readyState === WebSocket.CONNECTING) upstream.terminate();
+      if (upstream?.readyState === WebSocket.OPEN) mirrorClose(upstream, code, reason);
+      // 握手中或正在关闭的上游直接断开：CLOSING 时等对方回应最长要 30 秒，停止开发服务器时不能留着它
+      else if (upstream) upstream.terminate();
     });
   });
   return server;

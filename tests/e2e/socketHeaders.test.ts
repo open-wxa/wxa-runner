@@ -63,6 +63,6 @@ describe.skipIf(!e2eReady)('wx.connectSocket 的自定义请求头', () => {
   it('鉴权失败触发 error / close，不能把连上代理误报成上游连接成功', async () => {
     await runner.open('/?path=pages/index/index');
     const result = await runner.page.evaluate(url => window.__wxa_test_api__.callPageMethod('connect', url, 'invalid'), url);
-    expect(result).toMatchObject({ opened: false, messages: [], errors: ['connectSocket:fail'], code: 1011 });
+    expect(result).toMatchObject({ opened: false, messages: [], errors: ['connectSocket:fail'], code: 1006 });
   });
 });
