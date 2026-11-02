@@ -80,3 +80,48 @@ describe('FileStore 的浏览器兼容性', () => {
     expect(() => store.execute('writeFile', { filePath: '/a', data: 'a', encoding: 'unknown' })).toThrow('Unknown encoding: unknown');
   });
 });
+
+describe('FileStore 重命名', () => {
+  it('移动二进制文件、替换目标并保留源文件的元数据，同路径不删除文件', () => {
+    const store = new FileStore(['/usr']);
+    store.write('/usr/source', new Uint8Array([0, 255, 128]));
+    store.write('/usr/target', 'old');
+    const node = store.stat('/usr/source');
+    store.execute('rename', { oldPath: 'http://localhost/usr/source', newPath: '/usr/target' });
+    expect(store.stat('/usr/source')).toBeUndefined();
+    expect(store.stat('/usr/target')).toBe(node);
+    store.execute('rename', { oldPath: '/usr/./target', newPath: '/usr/target' });
+    expect([...store.read('/usr/target')]).toEqual([0, 255, 128]);
+  });
+
+  it('移动整个目录，支持替换空目录，不误移动同前缀的兄弟节点', () => {
+    const store = new FileStore(['/usr']);
+    store.mkdir('/usr/from/nested', true);
+    store.mkdir('/usr/to');
+    store.write('/usr/from/nested/file', 'hello');
+    store.write('/usr/from-other', 'keep');
+    store.execute('rename', { oldPath: '/usr/from', newPath: '/usr/to' });
+    expect(store.stat('/usr/from')).toBeUndefined();
+    expect(store.stat('/usr/from/nested/file')).toBeUndefined();
+    expect([...store.read('/usr/to/nested/file')]).toEqual([...new TextEncoder().encode('hello')]);
+    expect(store.stat('/usr/from-other')).toBeDefined();
+  });
+
+  it.each([
+    ['/usr/missing', '/usr/target'], ['/usr/source', '/missing/target'],
+    ['/usr/source', '/usr/dir'], ['/usr/dir', '/usr/source'],
+    ['/usr/dir', '/usr/full'], ['/usr/dir', '/usr/dir/child'],
+    ['/usr', '/moved'], ['/usr/dir', '/usr'], ['/', '/moved']
+  ])('非法移动 %s → %s 不改变已有节点', (oldPath, newPath) => {
+    const store = new FileStore(['/usr']);
+    store.mkdir('/usr/dir');
+    store.mkdir('/usr/full');
+    store.write('/usr/source', 'keep');
+    store.write('/usr/full/child', 'keep');
+    const before = store.readdir('/usr');
+    expect(() => store.execute('rename', { oldPath, newPath })).toThrow();
+    expect(store.readdir('/usr')).toEqual(before);
+    expect(store.stat('/usr/source')).toBeDefined();
+    expect(store.stat('/usr/full/child')).toBeDefined();
+  });
+});

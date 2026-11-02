@@ -27,6 +27,7 @@ Page({
     if (args.bytes) args.data = new Uint8Array(args.bytes).buffer;
     try {
       if (api === 'writeFileSync' || api === 'appendFileSync') fs[api](args.filePath, args.data, args.encoding);
+      else if (api === 'renameSync') fs[api](args.oldPath, args.newPath);
       else if (api === 'copyFileSync') fs[api](args.srcPath, args.destPath);
       else fs[api](args.filePath);
       return { ok: true };
@@ -126,6 +127,24 @@ describe.skipIf(!e2eReady)('下载文件的二进制读取与用户目录复制'
     expect(uploads).toHaveLength(1);
     expect(await runner.page.evaluate(() => window.__wxa_test_api__.errors())).toEqual([]);
   });
+  it('rename / renameSync 发布缓存文件后资源 URL 可读，旧路径消失，失败不会伪装成成功', async () => {
+    await runner.open('/?path=pages/index/index');
+    const root = await call('userPath');
+    for (const api of ['rename', 'renameSync']) {
+      const oldPath = root + '/' + api + '.tmp';
+      const newPath = root + '/' + api + '.bin';
+      await call('callFsSync', 'writeFileSync', { filePath: oldPath, bytes: [0, 255, 128] });
+      const invoke = api.endsWith('Sync') ? 'callFsSync' : 'callFs';
+      expect(await call(invoke, api, { oldPath, newPath })).toMatchObject(api.endsWith('Sync') ? { ok: true } : { errMsg: 'rename:ok' });
+      expect(await runner.page.evaluate(async path => Array.from(new Uint8Array(await (await fetch(path)).arrayBuffer())), newPath)).toEqual([0, 255, 128]);
+      expect(await runner.page.evaluate(async path => (await fetch(path)).status, oldPath)).toBe(404);
+      const failed = await call(invoke, api, { oldPath, newPath });
+      expect(failed.error || failed.errMsg).toMatch(/no such file/);
+      expect(await call('read', newPath)).toEqual({ data: [0, 255, 128] });
+    }
+    expect(await runner.page.evaluate(() => window.__wxa_test_api__.errors())).toEqual([]);
+  });
+
   it('普通用户文件写入后，unlink 必须真正删除同一份文件', async () => {
     await runner.open('/?path=pages/index/index');
     const filePath = (await call('userPath')) + '/note.txt';
