@@ -13,8 +13,8 @@ import { createProject } from '../helpers';
 
 const SENTINEL = 'sentinel.js';
 const REPORT_TIMEOUT = 5000;
-// macOS 的 FSEvents 会把开始监听前一刻的写入在 ready 之后补报出来。真实项目的文件早就存在
-// （DevServer 也先编译一遍才开始监听），所以建好临时项目后等一会儿再监听
+// macOS 的 FSEvents 会把开始监听前一刻的写入在 ready 之后补报出来，这里要确认的是之后的改动，
+// 所以建好临时项目后等一会儿再监听
 const SETTLE_BEFORE_WATCH = 300;
 
 let watcher: ProjectWatcher | null = null;

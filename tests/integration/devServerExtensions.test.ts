@@ -275,6 +275,25 @@ describe.skipIf(!ready)('开发工具依赖的编译状态', () => {
     }
   });
 
+  it('/__wxa__/ws：启动时编译失败，修好后整页刷新，清掉页面上的错误', async () => {
+    vi.stubEnv('WXA_BASELIB', '');
+    const root = project(BROKEN);
+    const server = createServer({ projectPath: root, watch: true });
+    const base = await server.start();
+    const socket = new WebSocket(`${base.replace('http', 'ws')}/__wxa__/ws`);
+    const messages: Array<{ type: string }> = [];
+    socket.on('message', data => messages.push(JSON.parse(String(data))));
+    try {
+      await new Promise(resolve => socket.once('open', resolve));
+      fs.writeFileSync(path.join(root, 'pages/index/index.wxml'), '<view>fixed</view>\n');
+      await vi.waitFor(() => expect(messages).toEqual([expect.objectContaining({ type: 'reload' })]), { timeout: 15000, interval: 200 });
+    } finally {
+      socket.close();
+      await server.close();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('/__wxa__/ws：重新编译失败时广播 { type: error, message }，修好后广播 hot 或 reload', async () => {
     vi.stubEnv('WXA_BASELIB', '');
     const root = project('<view>ok</view>\n');
@@ -283,13 +302,15 @@ describe.skipIf(!ready)('开发工具依赖的编译状态', () => {
     const socket = new WebSocket(`${base.replace('http', 'ws')}/__wxa__/ws`);
     const messages: Array<{ type: string; message?: string }> = [];
     socket.on('message', data => messages.push(JSON.parse(String(data))));
-    // 开发服务器不暴露文件监听何时就绪，就绪前的改动会被忽略：每次写入的内容略有不同，没收到就再写一次
-    const writeUntil = (file: string, content: string, type: (t: string) => boolean) => vi.waitFor(() => {
-      const found = messages.find(m => type(m.type));
-      if (found) return found;
-      fs.writeFileSync(file, `${content}<!-- ${Date.now()} -->\n`);
-      throw new Error(`还没收到，已收到：${JSON.stringify(messages)}`);
-    }, { timeout: 15000, interval: 1000 });
+    // start 返回时文件监听已经就绪，写一次就会重新编译
+    const writeUntil = (file: string, content: string, type: (t: string) => boolean) => {
+      fs.writeFileSync(file, content);
+      return vi.waitFor(() => {
+        const found = messages.find(m => type(m.type));
+        if (found) return found;
+        throw new Error(`还没收到，已收到：${JSON.stringify(messages)}`);
+      }, { timeout: 15000, interval: 200 });
+    };
     try {
       await new Promise(resolve => socket.once('open', resolve));
       const file = path.join(root, 'pages/index/index.wxml');

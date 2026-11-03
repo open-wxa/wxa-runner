@@ -56,7 +56,9 @@ if (kind === 'service') {
       if (key !== 'Protect') g[key] = globals[key];
     }
   };
-  hookRequire();
+  // 新版基础库在业务代码所在的子上下文里自己替换 Function；单上下文的基础库（3.7.0 及以前）不替换
+  const businessCodeHere = !subContextId && !script.dataset.appService;
+  hookRequire(businessCodeHere ? reserveFunctionConstructor() : undefined);
   g.createCustomImage = createCustomImage;
   moveCanvasesIntoPages();
 } else {
@@ -92,6 +94,35 @@ if (subContextId) {
 }
 
 /**
+ * 与新版基础库的 hijack 相同：真机上业务代码用不了 Function 构造函数，除 Function('return this') 返回全局对象外，
+ * 都返回 undefined、不编译参数。uni-app 的 props: { onBack: { default: Function } } 因此在真机上静默得到 undefined，
+ * 不替换的话 Vue 取默认值时会把 props 对象当代码编译，抛出 SyntaxError，组件创建失败。
+ *
+ * 单上下文的基础库初始化时自己要用 Function，初始化完又把内置对象改成只有基础库能写的属性，到执行业务代码时已经换不掉。
+ * 所以在基础库之前把 Function 和 Function.prototype.constructor 占成不可配置的存取器（基础库就不再接管），
+ * 返回的函数在执行业务代码前调用，之后取到的都是禁用的版本
+ */
+function reserveFunctionConstructor(): () => void {
+  const native = Function;
+  const disabled = function (...args: unknown[]) {
+    if (args.length > 0 && args[args.length - 1] === 'return this') return () => g;
+  };
+  disabled.prototype = native.prototype;
+  let current: unknown = native;
+  const reserve = (target: object, key: string) => Object.defineProperty(target, key, {
+    get: () => current,
+    set() {},
+    enumerable: false,
+    configurable: false
+  });
+  reserve(g, 'Function');
+  reserve(native.prototype, 'constructor');
+  return () => {
+    current = disabled;
+  };
+}
+
+/**
  * 基础库初始化完会把广告等缺伴生子包的接口改成「返回 undefined」的函数，占位只有在
  * 业务代码执行前装才留得住 —— bootstrap 里 require 第一个业务模块就是那个时机。
  *
@@ -99,10 +130,15 @@ if (subContextId) {
  * 而异（3.7.0 直接写 globalThis，并不调 __passWAServiceGlobal__），事后包装没有可靠的时机。
  * installApiStubs 幂等，每次 require 都查一遍，不赌某一次调用的先后。
  */
-function hookRequire() {
+function hookRequire(beforeBusinessCode?: () => void) {
   let real: unknown;
+  let businessCodeStarted = false;
   const wrapper = function (this: unknown, ...args: unknown[]) {
     if (g.wx) installApiStubs(g.wx);
+    if (!businessCodeStarted) {
+      businessCodeStarted = true;
+      beforeBusinessCode?.();
+    }
     return (real as (...a: unknown[]) => unknown).apply(this, args);
   };
   try {
