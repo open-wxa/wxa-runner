@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.12.3](https://github.com/open-wxa/wxa-runner/compare/v0.12.2...v0.12.3) (2026-11-03)
+
+
+### 问题修复
+
+* 开发服务器启动时漏编译后续写入的文件；单上下文基础库下禁用 Function 构造函数 ([#110](https://github.com/open-wxa/wxa-runner/issues/110)) ([237dceb](https://github.com/open-wxa/wxa-runner/commit/237dceb2f5fc47acf4ffa2c0321c348b89e59bb6))
+
 ## [0.12.2](https://github.com/open-wxa/wxa-runner/compare/v0.12.1...v0.12.2) (2026-11-02)
 
 
