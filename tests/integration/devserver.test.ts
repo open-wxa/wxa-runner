@@ -492,3 +492,37 @@ describe.skipIf(!ready)('DevServer：转发浏览器发来的报错', () => {
     expect(output.error).not.toHaveBeenCalled();
   });
 });
+
+describe.skipIf(!ready)('DevServer：文件监听', () => {
+  let server: DevServer | null = null;
+
+  afterAll(async () => {
+    vi.unstubAllEnvs();
+    await server?.close();
+  });
+
+  // uni-app 等构建工具在首轮产物写出后就启动开发服务器，这时还在陆续写入其余文件（如 custom-tab-bar、组件的 json）
+  it('start 返回时文件监听已经就绪：紧接着写入的文件也会重新编译', async () => {
+    vi.stubEnv('WXA_BASELIB', '');
+    const root = createProject({
+      'app.json': { pages: ['pages/index/index'] },
+      'pages/index/index.json': {},
+      'pages/index/index.wxml': '<view class="a">hi</view>',
+      'pages/index/index.wxss': '.a { color: red; }',
+      'pages/index/index.js': 'Page({})'
+    });
+    server = new DevServer({
+      projectPath: root,
+      port: 0,
+      runtimeDir: RUNTIME_DIR,
+      logger: { log: () => undefined, warn: () => undefined, error: () => undefined }
+    });
+    const base = await server.start();
+
+    fs.writeFileSync(path.join(root, 'pages/index/index.wxss'), '.a { color: blue; }');
+
+    await vi.waitFor(async () => {
+      expect(await (await fetch(base + '/__wxa__/page-frame.js')).text()).toContain('blue');
+    }, { timeout: 5000, interval: 200 });
+  });
+});

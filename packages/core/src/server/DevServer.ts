@@ -147,6 +147,8 @@ export class DevServer {
   private socketProxy: WebSocketServer | null = null;
   private sockets: WebSocketServer | null = null;
   private watcher: ProjectWatcher | null = null;
+  /** 上次编译失败时页面上显示着错误，修好后整页刷新才能清掉 */
+  private lastBuildFailed = false;
   private address = '';
   private lanAccess = false;
   /** 运行时生成的临时文件（canvas 导出、拍照等），随服务器进程存在 */
@@ -206,11 +208,16 @@ export class DevServer {
   }
 
   async start(): Promise<string> {
+    // 等文件监听就绪再构建：uni-app 等构建工具写出首轮产物就启动开发服务器，其余文件还在陆续写入。
+    // 就绪前写入的文件构建时能读到，之后写入的由监听触发重新编译
+    if (this.options.watch !== false) await this.startWatching();
+
     // 先构建一次：编译错误在终端里立即可见
     try {
       const build = await this.builder.build();
       this.logger.log(`[wxa-runner] 编译完成：${build.pages.length} 个页面，${build.components.length} 个组件，${build.durationMs}ms`);
     } catch (error) {
+      this.lastBuildFailed = true;
       this.logger.error(`[wxa-runner] 编译失败：\n${(error as Error).message}`);
     }
 
@@ -236,12 +243,18 @@ export class DevServer {
     });
 
     const host = this.options.host || 'localhost';
-    const port = await listen(server, this.options.port, host, this.logger);
+    let port: number;
+    try {
+      port = await listen(server, this.options.port, host, this.logger);
+    } catch (error) {
+      await this.watcher?.close();
+      this.watcher = null;
+      throw error;
+    }
     this.server = server;
     this.lanAccess = LOCAL_HOST_OF_ANY_ADDRESS.has(host);
     this.address = `http://${LOCAL_HOST_OF_ANY_ADDRESS.get(host) ?? host}:${port}`;
 
-    if (this.options.watch !== false) this.startWatching();
     // 启动时先取一次：新版开发者工具要先为项目开启自动化接口，第一次 wx.login 就不用等；不可用时在终端提示原因
     this.ticketSource?.()
       .then(requireUsableTicket)
@@ -519,10 +532,8 @@ export class DevServer {
     return this.options.watch !== false;
   }
 
-  private startWatching() {
-    // 上次编译失败时页面上显示着错误，修好后整页刷新才能清掉
-    let lastBuildFailed = false;
-
+  /** 返回初次扫描完成的时刻，此前已存在的文件不会作为改动报告 */
+  private startWatching(): Promise<void> {
     // 项目目录下的 setup 文件不一定在小程序根目录（miniprogramRoot）里
     const watched = [this.project.root];
     const outsideRoot = (file: string) => path.relative(this.project.root, file).startsWith('..');
@@ -532,23 +543,24 @@ export class DevServer {
     if (outsideRoot(projectConfig) && fs.existsSync(projectConfig)) watched.push(projectConfig);
 
     this.watcher = watchProject(this.project.root, watched, async ({ files, structural }) => {
-      const reloadOnly = structural || lastBuildFailed;
+      const reloadOnly = structural || this.lastBuildFailed;
       this.builder.invalidate(files);
       const label = files.length > 3 ? `${files.slice(0, 3).join(', ')} 等 ${files.length} 个文件` : files.join(', ');
 
       try {
         const build = await this.builder.build();
-        lastBuildFailed = false;
+        this.lastBuildFailed = false;
         const plan = reloadOnly ? null : planHotUpdate(files, build);
         this.logger.log(`[wxa-runner] ${label} 已更新，重新编译 ${build.durationMs}ms${plan ? '，热更新' : ''}`);
         this.broadcast(plan ? { type: 'hot', version: build.version, ...plan } : { type: 'reload' });
       } catch (error) {
-        lastBuildFailed = true;
+        this.lastBuildFailed = true;
         const message = (error as Error).message;
         this.logger.error(`[wxa-runner] 编译失败：\n${message}`);
         this.broadcast({ type: 'error', message });
       }
     });
+    return this.watcher.ready;
   }
 
   private broadcast(message: Record<string, unknown>) {

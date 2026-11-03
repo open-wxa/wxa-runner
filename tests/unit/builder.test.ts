@@ -198,6 +198,21 @@ describe.skipIf(!hasToolchain())('完整构建', () => {
     expect(latest.pageFrame).toContain('second');
   });
 
+  it('进行中的构建失败、期间文件又有变化时，重新构建而不是报这次过期的错误', async () => {
+    const root = demoProject();
+    const builder = new AppBuilder(new MiniProgram(root));
+    // 构建工具还没写完产物
+    fs.writeFileSync(path.join(root, 'app.json'), '{"pages": [');
+    const running = builder.build();
+
+    fs.writeFileSync(path.join(root, 'app.json'), JSON.stringify({ pages: ['pages/a/a', 'pages/b/b'] }));
+    builder.invalidate(['app.json']);
+    const latest = builder.build();
+
+    await expect(running).rejects.toThrow(/app\.json/);
+    await expect(latest).resolves.toMatchObject({ pages: ['pages/a/a', 'pages/b/b'] });
+  });
+
   it('热更新用的渲染层模板只含模板，不含样式（重复执行样式代码会累积 rpx 重算回调）', async () => {
     const result = await new AppBuilder(new MiniProgram(demoProject())).build();
     expect(result.pageTemplates).toContain('__wxAppCode__["pages/a/a.wxml"] = $gwx("./pages/a/a.wxml")');

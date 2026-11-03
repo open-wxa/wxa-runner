@@ -136,8 +136,9 @@ export class AppBuilder {
         this.pending = { covers: this.changes, result };
       }
       const { covers, result } = this.pending;
-      const built = await result;
-      if (covers >= wanted) return built;
+      if (covers >= wanted) return result;
+      // 进行中的这次可能读到了写到一半的文件，成功和失败都不算数
+      await result.catch(() => undefined);
     }
   }
 
