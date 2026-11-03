@@ -125,6 +125,12 @@ export interface DevServerOptions {
    * 不能改变行数，编译错误和热更新才能对应到源文件；相同输入要返回相同输出。源文件不会被修改
    */
   wxmlTransform?: (code: string, file: string) => string;
+  /**
+   * JS 模块包装进 define 前的转换，file 是相对小程序根目录的路径（如 pages/index/index.js）。
+   * 在「ES6 转 ES5」之后执行，返回的代码会内联进 define 包装；不能改变行数，DevTools 里的
+   * 行号和报错才能对应到源文件；相同输入要返回相同输出。源文件不会被修改
+   */
+  jsTransform?: (code: string, file: string) => string;
   /** 开发服务器扩展：把上面几个扩展点打包在一起的开发工具，按顺序合并在直接给出的选项之后，见 extensions.ts */  extensions?: DevServerExtension[];
   logger?: Pick<Console, 'log' | 'warn' | 'error'>;
 }
@@ -186,7 +192,7 @@ export class DevServer {
     this.ticketSource = this.devtoolsLogin ? developerTicketSource(this.project.projectPath, this.logger) : null;
     this.plugins = new PluginStore(this.ticketSource && new WechatDevClient(this.project.appid, this.ticketSource), this.logger);
     this.device = { ...DEFAULT_DEVICE, ...options.device };
-    this.builder = new AppBuilder(this.project, { wxmlTransform: extended.wxmlTransform });
+    this.builder = new AppBuilder(this.project, { wxmlTransform: extended.wxmlTransform, jsTransform: extended.jsTransform });
     this.setupFile = resolveSetupFile(options.setup, this.project.projectPath);
     this.setupEnv = collectSetupEnv(process.env);
     this.app = this.createApp();

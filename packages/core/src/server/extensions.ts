@@ -25,6 +25,8 @@ export interface ExtensionSetup {
   webviewScripts?: WebviewScript[];
   middlewares?: DevServerMiddleware[];
   wxmlTransform?: (code: string, file: string) => string;
+  /** 同 wxmlTransform，作用于包装进 define 前的 JS 模块，见 DevServerOptions.jsTransform */
+  jsTransform?: (code: string, file: string) => string;
   /** 扩展自己的页面：启动信息里打印，命令行 --open 时打开 */
   entry?: { label: string; path: string };
 }
@@ -36,19 +38,20 @@ export interface ExtensionEntry {
 }
 
 type WxmlTransform = (code: string, file: string) => string;
-
+type JsTransform = (code: string, file: string) => string;
 /**
  * 把扩展合并进开发服务器自己的扩展点：脚本和中间件按顺序拼在后面，
- * wxml 转换按顺序串起来（先执行选项里直接给的，再依次执行各个扩展的）
+ * wxml / js 转换按顺序串起来（先执行选项里直接给的，再依次执行各个扩展的）
  */
 export function applyExtensions(
   base: ExtensionSetup,
   extensions: DevServerExtension[],
   context: ExtensionContext
-): Required<Omit<ExtensionSetup, 'entry' | 'wxmlTransform'>> & { wxmlTransform?: WxmlTransform; entries: ExtensionEntry[] } {
+): Required<Omit<ExtensionSetup, 'entry' | 'wxmlTransform' | 'jsTransform'>> & { wxmlTransform?: WxmlTransform; jsTransform?: JsTransform; entries: ExtensionEntry[] } {
   const webviewScripts = [...(base.webviewScripts ?? [])];
   const middlewares = [...(base.middlewares ?? [])];
   const transforms = base.wxmlTransform ? [base.wxmlTransform] : [];
+  const jsTransforms = base.jsTransform ? [base.jsTransform] : [];
   const entries: ExtensionEntry[] = [];
 
   for (const extension of extensions) {
@@ -61,11 +64,17 @@ export function applyExtensions(
     webviewScripts.push(...(setup.webviewScripts ?? []));
     middlewares.push(...(setup.middlewares ?? []));
     if (setup.wxmlTransform) transforms.push(setup.wxmlTransform);
+    if (setup.jsTransform) jsTransforms.push(setup.jsTransform);
     if (setup.entry) entries.push({ name: extension.name, ...setup.entry });
   }
 
-  const wxmlTransform = transforms.length === 0
-    ? undefined
-    : (code: string, file: string) => transforms.reduce((result, transform) => transform(result, file), code);
-  return { webviewScripts, middlewares, wxmlTransform, entries };
+  const chain = (transforms: JsTransform[]) =>
+    transforms.length === 0 ? undefined : (code: string, file: string) => transforms.reduce((result, transform) => transform(result, file), code);
+  return {
+    webviewScripts,
+    middlewares,
+    wxmlTransform: chain(transforms),
+    jsTransform: chain(jsTransforms),
+    entries
+  };
 }
