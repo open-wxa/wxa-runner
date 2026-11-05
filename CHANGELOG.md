@@ -1,5 +1,13 @@
 # 更新日志
 
+## [0.12.4](https://github.com/open-wxa/wxa-runner/compare/v0.12.3...v0.12.4) (2026-11-05)
+
+
+### 问题修复
+
+* errors() 收集被基础库捕获、只打印到控制台的错误 ([#115](https://github.com/open-wxa/wxa-runner/issues/115)) ([a86384b](https://github.com/open-wxa/wxa-runner/commit/a86384b10cba16eb449007cc6e4b2de2fcd4dc6e))
+* 单上下文基础库下读到伴生 SDK 不再中断启动；云开发调用明确失败 ([#114](https://github.com/open-wxa/wxa-runner/issues/114)) ([4e420fc](https://github.com/open-wxa/wxa-runner/commit/4e420fc2fb4f68fde28f54cdc8269e46e9ed964f))
+
 ## [0.12.3](https://github.com/open-wxa/wxa-runner/compare/v0.12.2...v0.12.3) (2026-11-03)
 
 
