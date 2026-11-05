@@ -10,10 +10,10 @@
  */
 
 import { hookConsole } from './consoleHook';
-import { installWeixinJSContext } from './context';
+import { installSingleContextLibLoader, installWeixinJSContext } from './context';
 import { fileSession } from './fileSession';
 import { PROXY_PREFIX, toServerPath } from './networkPanel';
-import { installApiStubs } from './sdkStubs';
+import { guardSdkGlobals, installApiStubs } from './sdkStubs';
 import type { FrameBridge, FrameKind, HostApi } from './types';
 import { createWeixinWorker } from './workers';
 
@@ -56,9 +56,19 @@ if (kind === 'service') {
       if (key !== 'Protect') g[key] = globals[key];
     }
   };
-  // 新版基础库在业务代码所在的子上下文里自己替换 Function；单上下文的基础库（3.7.0 及以前）不替换
+  // 单上下文的基础库（3.7.0 及以前）：业务代码和基础库在同一个全局对象里。新版基础库在业务代码所在的子上下文里
+  // 自己替换 Function，伴生 SDK 也能正常加载，这两件事都不用管
   const businessCodeHere = !subContextId && !script.dataset.appService;
-  hookRequire(businessCodeHere ? reserveFunctionConstructor() : undefined);
+  if (businessCodeHere) {
+    const disableFunctionConstructor = reserveFunctionConstructor();
+    const globalsBeforeBaseLib = new Set(Object.getOwnPropertyNames(g));
+    hookRequire(() => {
+      disableFunctionConstructor();
+      guardSdkGlobals(g, globalsBeforeBaseLib);
+    });
+  } else {
+    hookRequire();
+  }
   g.createCustomImage = createCustomImage;
   moveCanvasesIntoPages();
 } else {
@@ -89,6 +99,8 @@ if (subContextId) {
       appServiceScripts: JSON.parse(script.dataset.appService),
       hot: script.dataset.hot === '1'
     });
+  } else if (kind === 'service') {
+    installSingleContextLibLoader(window);
   }
   host.registerFrame(kind, window, bridge, webviewId);
 }

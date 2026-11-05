@@ -16,6 +16,8 @@ export interface MiscApiOptions {
 
 /** wx.serviceMarket.invokeService 经原生 operateWXData 发出时的 api_name */
 const SERVICE_MARKET = 'webapi_servicemarket_jsapi_comm';
+/** 云开发（wx.cloud 的 init、callFunction、数据库、存储）经原生 operateWXData 发出时的 api_name，具体操作在 data.qbase_api_name 里 */
+const CLOUD = 'qbase_commapi';
 
 export function createMiscApis(appid: string, options?: MiscApiOptions): Record<string, ApiHandler> {
   /** 经开发服务器借开发者工具的登录态向微信取结果 */
@@ -26,6 +28,20 @@ export function createMiscApis(appid: string, options?: MiscApiOptions): Record<
       options?.onDevtoolsLoginFail?.(api, (error as Error).message);
       throw error;
     }
+  };
+
+  let cloudWarned = false;
+  /**
+   * 云开发要以用户身份访问微信后台，浏览器里做不到。明确失败而不是返回空的成功：后者让 SDK 报出
+   * Cannot read properties of undefined (reading 'stat') 这类看不出原因的错误。失败原因会带进
+   * callFunction、数据库等接口的 errMsg
+   */
+  const cloudUnavailable = (api: string, operation?: string) => {
+    if (!cloudWarned) {
+      cloudWarned = true;
+      console.warn('[wxa-runner] 云开发（wx.cloud）在浏览器运行时不可用，调用会失败');
+    }
+    return fail(api, `wxa-runner 不支持云开发（${operation ?? 'unknown'}）`);
   };
 
   return {
@@ -47,6 +63,7 @@ export function createMiscApis(appid: string, options?: MiscApiOptions): Record<
           (error: Error) => serviceMarketFail(error.message)
         );
       }
+      if (args.data?.api_name === CLOUD) return cloudUnavailable(api, args.data.data?.qbase_api_name);
       if (args.data?.api_name === 'webapi_getwxanetwork') return bizDomainUnavailable(api);
       if (args.data?.api_name === 'webapi_getwxauserprivacyauthinfo') return ok(api, { data: { data: JSON.stringify(PRIVACY_AUTH_INFO) } });
       return ok(api);

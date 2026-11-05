@@ -372,6 +372,19 @@ describe('其它 API', () => {
     expect(res.errMsg).toMatch(/^operateWXData:fail .*--devtools-login/);
   });
 
+  it('云开发的调用明确失败，失败原因带上具体操作，只提示一次', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const cloud = createMiscApis('wx1');
+    const callCloud = (operation: string) =>
+      call(cloud, 'operateWXData', { data: { api_name: 'qbase_commapi', data: { qbase_api_name: operation } } });
+
+    expect(callCloud('tcbapi_slowcallfunction_v2').errMsg).toBe('operateWXData:fail wxa-runner 不支持云开发（tcbapi_slowcallfunction_v2）');
+    expect(callCloud('tcbapi_db_querydocument').errMsg).toBe('operateWXData:fail wxa-runner 不支持云开发（tcbapi_db_querydocument）');
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('云开发');
+    warn.mockRestore();
+  });
+
   it('开放接口返回可预测的模拟数据，支付明确失败', () => {
     expect(call(apis, 'login').code).toMatch(/^wxa_mock_code_/);
     expect(phoneCodeSeenByBaseLib(call(apis, 'getPhoneNumber'))).toMatch(/^mock_phone_code_/);

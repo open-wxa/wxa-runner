@@ -45,6 +45,21 @@ export function installWeixinJSContext(main: Window, host: HostApi, options: Wei
   };
 }
 
+/**
+ * 单上下文的基础库（3.7.0 及以前）也读 WeixinJSContext，只用它的 loadLibFiles 加载广告、云开发等伴生 SDK
+ * （WAAppAd.js、WACloud.js）。没有这个接口时，基础库认为自己在「真机调试 1.0」里，业务代码一读到这些能力
+ * 就抛 Fatal: unexpected loadSdkSubPackage case；Taro 等框架启动时遍历全局对象，也会读到。
+ *
+ * 只报告加载成功、不执行文件：基础库在 devtools 平台上把 SDK 依赖的 getXGlobalVar 挂在内部对象上，SDK 文件
+ * 在这里拿不到，执行了也只是各自报 t is not a function；返回失败则报一串 WAFiles … is not exist。报告成功后
+ * 基础库退回自带的部分：wx.cloud 的接口本体在 WAService.js 里，调用经 operateWXData 明确失败（见 host/api/misc.ts）；
+ * 其余 SDK 的全局由 sdkStubs 的 guardSdkGlobals 当作不存在，广告接口由 installApiStubs 接住。
+ * 必须在基础库之前调用，基础库初始化时取走它再删掉
+ */
+export function installSingleContextLibLoader(service: Window) {
+  (service as any).WeixinJSContext = { loadLibFiles: () => 1 };
+}
+
 /** 主上下文和它创建的子上下文 */
 class JsContexts {
   private readonly boot: AppBoot;

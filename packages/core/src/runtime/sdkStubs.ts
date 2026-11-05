@@ -119,3 +119,33 @@ export function installApiStubs(wx: Record<string, any>, options: ApiStubOptions
 
   return replaced;
 }
+
+/** 单上下文里唯一要照常读取的伴生 SDK 全局：云开发的接口本体在 WAService.js 里，wx.cloud 就是经它取到的 */
+const BUILT_IN_SDK_GLOBALS = new Set(['__cloudSDKMain__']);
+
+/**
+ * 单上下文的基础库（3.7.0 及以前）把伴生 SDK 挂成全局对象上的懒加载存取器（ADSDK、MidasSDK、__sclEngine__ 等），
+ * 第一次读时才加载。这种上下文里它们加载不了（见 context.ts 的 installSingleContextLibLoader），读一次的后果是：
+ * - 有的存取器直接抛 TypeError（往 undefined 上写 inject）。业务代码一般不直接读它们，但 Taro 等框架启动时
+ *   把全局对象上的属性逐个拷到自己的 window 上，一读就中断 app.js
+ * - 不抛错的，基础库也会把这个 SDK 标成已注入，之后自己去用它。如 2.32.3 首屏渲染时调 ADSDK.getPreloadAdUnitIds()，
+ *   页面渲染不出来
+ *
+ * 所以在业务代码执行前，把基础库加上的、可重新定义的存取器换成返回 undefined，不触发加载，等同这个 SDK 不存在。
+ * 只看基础库加上的（不在 before 里），不按名字列：各版本的伴生 SDK 不一样。读取不提示，真用到广告时由
+ * installApiStubs 的占位提示；基础库之后回写这些全局不受影响。
+ *
+ * @param before 基础库执行前全局对象上已有的属性名
+ * @returns 换掉了的属性名
+ */
+export function guardSdkGlobals(global: object, before: ReadonlySet<string>): string[] {
+  const guarded: string[] = [];
+  for (const key of Object.getOwnPropertyNames(global)) {
+    if (before.has(key) || BUILT_IN_SDK_GLOBALS.has(key)) continue;
+    const descriptor = Object.getOwnPropertyDescriptor(global, key);
+    if (!descriptor?.get || !descriptor.configurable) continue;
+    Object.defineProperty(global, key, { get: () => undefined, enumerable: descriptor.enumerable, configurable: true });
+    guarded.push(key);
+  }
+  return guarded;
+}

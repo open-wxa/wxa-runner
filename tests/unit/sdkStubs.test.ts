@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { installApiStubs, UNSUPPORTED_AD_APIS } from '../../packages/core/src/runtime/sdkStubs';
+import { guardSdkGlobals, installApiStubs, UNSUPPORTED_AD_APIS } from '../../packages/core/src/runtime/sdkStubs';
 
 const install = () => {
   const warnings: string[] = [];
@@ -107,5 +107,55 @@ describe('广告接口占位', () => {
     const replaced = installApiStubs(wx, { warn: () => undefined });
     expect(replaced).not.toContain('createRewardedVideoAd');
     expect(replaced).toContain('createInterstitialAd');
+  });
+});
+
+describe('伴生 SDK 的懒加载全局', () => {
+  /** 模拟基础库执行前后的全局对象：location 是原有的存取器，后面几个是基础库加上的，读取时会触发加载 */
+  const setup = () => {
+    const loaded: string[] = [];
+    const lazy = (name: string, value: () => unknown) => ({
+      get: () => {
+        loaded.push(name);
+        return value();
+      },
+      configurable: true
+    });
+    const global: Record<string, any> = {};
+    Object.defineProperty(global, 'location', { get: () => 'http://localhost/', configurable: true });
+    const before = new Set(Object.getOwnPropertyNames(global));
+    Object.defineProperty(global, 'ADSDK', lazy('ADSDK', () => { throw new TypeError("Cannot set properties of undefined (setting 'inject')"); }));
+    Object.defineProperty(global, 'MidasSDK', lazy('MidasSDK', () => undefined));
+    Object.defineProperty(global, '__cloudSDKMain__', lazy('__cloudSDKMain__', () => ({ getCloudAPI: () => ({}) })));
+    Object.defineProperty(global, 'getApp', { get: () => () => undefined, configurable: false });
+    global.define = () => undefined;
+    return { global, before, loaded };
+  };
+
+  it('Taro 那样逐个拷贝全局属性不会中断，也不会触发加载', () => {
+    const { global, before, loaded } = setup();
+    guardSdkGlobals(global, before);
+
+    const copy: Record<string, unknown> = {};
+    expect(() => Object.getOwnPropertyNames(global).forEach(key => { copy[key] = global[key]; })).not.toThrow();
+    expect(copy.ADSDK).toBeUndefined();
+    expect(copy.MidasSDK).toBeUndefined();
+    expect(loaded).toEqual(['__cloudSDKMain__']);
+  });
+
+  it('云开发的入口照常读取：wx.cloud 经它取到', () => {
+    const { global, before } = setup();
+    guardSdkGlobals(global, before);
+    expect(typeof global.__cloudSDKMain__.getCloudAPI).toBe('function');
+  });
+
+  it('只换掉基础库加上的、可重新定义的存取器，基础库之后回写的值不受影响', () => {
+    const { global, before } = setup();
+    expect(guardSdkGlobals(global, before).sort()).toEqual(['ADSDK', 'MidasSDK']);
+    expect(global.location).toBe('http://localhost/');
+    expect(typeof global.getApp).toBe('function');
+
+    Object.defineProperty(global, 'ADSDK', { value: { RewardedVideoAd: class {} }, configurable: true });
+    expect(global.ADSDK.RewardedVideoAd).toBeTypeOf('function');
   });
 });
