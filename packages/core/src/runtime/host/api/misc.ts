@@ -66,10 +66,14 @@ export function createMiscApis(appid: string, options?: MiscApiOptions): Record<
       if (args.data?.api_name === CLOUD) return cloudUnavailable(api, args.data.data?.qbase_api_name);
       if (args.data?.api_name === 'webapi_getwxanetwork') return bizDomainUnavailable(api);
       if (args.data?.api_name === 'webapi_getwxauserprivacyauthinfo') return ok(api, { data: { data: JSON.stringify(PRIVACY_AUTH_INFO) } });
-      return ok(api);
+      // 原生的成功结果总带着 data，2.32.3 的基础库直接解构它，没有就报 Cannot destructure property 'data'。
+      // 基础库启动时自己就会调几个（webapi_getwxabusinessconfig、getSubjectalterInfo 等）
+      return ok(api, { data: {} });
     },
     getAppContact: (args, { api }) =>
       args.keyPath === 'WxaAppInfo.Network.BizDomain' ? bizDomainUnavailable(api) : ok(api),
+    // 基础库内部的实验开关。不在实验里时原生返回空字符串；没有 testConfig 时 3.3.4 读它的 length 报错
+    getABTestConfig: (_args, { api }) => ok(api, { testConfig: '' }),
 
     // 插件：基础库启动时校验插件、取插件信息，插件里的网络请求要等拿到这两样才发出。插件代码也只在 --devtools-login 时下载
     ...(options?.devtoolsLogin ? {

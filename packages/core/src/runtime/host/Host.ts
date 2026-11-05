@@ -8,6 +8,7 @@
 import type { ConsoleLevel } from '../consoleHook';
 import type { AppInfo, ForwardConsole, FrameBridge, FrameKind, HostApi, InvokeCallback } from '../types';
 import { ConsoleForwarder, ConsoleReport } from './ConsoleForwarder';
+import { caughtError, RecentErrors } from './frameErrors';
 import { ApiContext, ApiRegistry, ApiResult, fail, ok } from './api/registry';
 import { createAudioApis } from './api/audio';
 import { createFileSystemApis } from './api/fs';
@@ -75,6 +76,7 @@ type CanvasMessage = Partial<CanvasBox> & { canvasNumber: number; type?: string;
 export class Host implements HostApi {
   readonly device;
   readonly errors: FrameError[] = [];
+  private readonly recentErrors = new RecentErrors();
   /** 小程序发出的 wx.request */
   readonly requests = new RequestLog();
   readonly api = new ApiRegistry(context => this.reportUnimplemented(context));
@@ -267,8 +269,7 @@ export class Host implements HostApi {
       message: err ? err.message : String(error),
       stack: typeof err?.stack === 'string' ? err.stack : undefined
     };
-    this.errors.push(report);
-    this.forwarder.error(kind, webviewId, report.message, report.stack);
+    this.recordError(report);
   }
 
   get forwardConsole(): ForwardConsole {
@@ -276,7 +277,15 @@ export class Host implements HostApi {
   }
 
   reportConsole(kind: FrameKind, webviewId: number, level: ConsoleLevel, args: unknown[]) {
-    this.forwarder.console(kind, webviewId, level, args);
+    const caught = level === 'error' ? caughtError(args[0]) : null;
+    if (caught) this.recordError({ kind, webviewId, ...caught });
+    else this.forwarder.console(kind, webviewId, level, args);
+  }
+
+  private recordError(report: FrameError) {
+    if (this.recentErrors.isRepeated(report.kind, report.webviewId, report.message, report.stack)) return;
+    this.errors.push(report);
+    this.forwarder.error(report.kind, report.webviewId, report.message, report.stack);
   }
 
   /**

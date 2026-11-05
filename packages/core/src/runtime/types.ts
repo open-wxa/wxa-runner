@@ -29,7 +29,7 @@ export interface HostApi {
   publish(kind: FrameKind, win: Window, event: string, data: unknown, webviewIds?: number[]): void;
   frameLoaded(kind: FrameKind, webviewId: number): void;
   reportError(kind: FrameKind, webviewId: number, error: unknown): void;
-  /** iframe 里的 console.warn / console.error，开启转发时才会调用 */
+  /** iframe 里的 console.error 和 console.warn。console.error 总会报来，基础库捕获的错误要记入 errors()；console.warn 只在转发全部时报来 */
   reportConsole(kind: FrameKind, webviewId: number, level: 'warn' | 'error', args: unknown[]): void;
   readonly forwardConsole: ForwardConsole;
   /** 把逻辑层建的 2d、webgl 画布放进页面里对应的 wx-canvas；认不出是哪个画布时（如离屏画布）留在原处。type 是 getContext 的类型 */

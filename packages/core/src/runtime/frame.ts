@@ -81,10 +81,8 @@ overrideUserAgent();
 
 window.addEventListener('error', event => host.reportError(kind, webviewId, event.error || event.message));
 window.addEventListener('unhandledrejection', event => host.reportError(kind, webviewId, event.reason));
-// 生命周期、事件处理函数里的错误被基础库捕获后只用 console.error 打印，转发报错也要包装它
-if (host.forwardConsole) {
-  hookConsole(host.forwardConsole === 'all' ? ['warn', 'error'] : ['error'], (level, args) => host.reportConsole(kind, webviewId, level, args));
-}
+// 生命周期、事件处理函数、wx API 回调里的错误被基础库捕获后只用 console.error 打印，记入 errors() 也要包装它
+hookConsole(host.forwardConsole === 'all' ? ['warn', 'error'] : ['error'], (level, args) => host.reportConsole(kind, webviewId, level, args));
 
 if (subContextId) {
   (window.parent as any).__wxaContexts.prepare(subContextId, window);

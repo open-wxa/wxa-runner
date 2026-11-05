@@ -22,7 +22,7 @@ export type ApiHandler = (args: any, context: ApiContext) => ApiResult | string 
 /** 基础库内部频繁调用、无需提示的 API */
 const SILENT_APIS = new Set([
   'reportKeyValue', 'reportIDKey', 'reportRealtimeAction', 'reportPerformance', 'systemLog', 'traceEvent',
-  'getPermissionBytes', 'getABTestConfig', 'initRenderDone', 'saveInitialRenderingCache',
+  'getPermissionBytes', 'initRenderDone', 'saveInitialRenderingCache',
   'setKeyValue', 'invokeMiniProgramAPI', 'updatePerfData', 'reportSubmitForm',
   'initReady', 'noticePerformanceMetrics'
 ]);

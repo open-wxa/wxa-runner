@@ -113,7 +113,7 @@ export interface WxaTestApi {
   /** 清空小程序的 Storage。基础库会缓存读过的值，小程序启动后再清空，已读过的 key 可能仍读到旧值 */
   clearStorage(): void;
   /**
-   * 逻辑层、渲染层的运行时错误，以及业务代码调用过的未实现 wx API（api 为 API 名称，每个 API 记一次）。
+   * 逻辑层、渲染层的运行时错误（包括被基础库捕获、只打印到控制台的），以及业务代码调用过的未实现 wx API（api 为 API 名称，每个 API 记一次）。
    * 这些都不会让测试失败，需要自己检查
    */
   errors(): FrameError[];

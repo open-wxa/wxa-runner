@@ -273,7 +273,7 @@ test('H5 登录后显示用户名', async ({ miniProgram, context }) => {
 
 每个用例结束时，fixture 检查小程序有没有出错，有就让用例失败：
 
-- 逻辑层、渲染层的运行时错误
+- 逻辑层、渲染层的运行时错误，包括被基础库捕获、只打印到控制台的（生命周期、事件处理函数、wx API 回调里抛出的）
 - 调用了还没实现的 `wx` API。它们返回成功以免打断业务代码，测试里要 mock 掉
 
 `miniProgram.errors()` 能看到具体内容。有意触发错误的用例，用 `test.use({ wxaCheckErrors: false })` 关掉检查。

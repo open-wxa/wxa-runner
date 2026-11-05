@@ -80,7 +80,7 @@ test.afterEach(async ({ page }) => {
 | `requests(pattern?)` / `clearRequests()` | 小程序发出的 `wx.request`：方法、地址、请求头、请求体 `data`、拦截它的规则 `routedBy`。被拦截的和真正发出的都有，只保留最近 1000 个 |
 | `navigateTo` / `navigateBack` / `redirectTo` / `reLaunch` / `switchTab` | 直接跳转页面，同 `wx` 上的同名 API |
 | `getStorage(key)` / `clearStorage()` | 读取 / 清空小程序的存储 |
-| `errors()` | 逻辑层、渲染层的运行时错误，以及业务代码调用过的未实现 API（`api` 为 API 名称，每个 API 记一次） |
+| `errors()` | 逻辑层、渲染层的运行时错误（包括被基础库捕获、只打印到控制台的），以及业务代码调用过的未实现 API（`api` 为 API 名称，每个 API 记一次） |
 
 `mock`、`route` 整页刷新后失效。详细说明见类型注释（`WxaTestApi`）。
 
