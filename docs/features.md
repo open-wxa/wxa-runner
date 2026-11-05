@@ -66,6 +66,7 @@ wxa-runner 用来本地调试和跑自动化测试，发布相关的事仍然在
 - **基础库版本**：3.7.1 起不会自动选用，要用 `--baselib` 或 `WXA_BASELIB` 指定，启动时提示超出已验证的范围。内置的只有 3.7.0，更新的版本先在开发者工具里下载
 - **未实现的 API**：调用后返回成功，以免打断业务代码；测试里会被发现，见[检查运行时错误](./testing.md#检查运行时错误)
 - **设备能力**：不支持蓝牙等设备能力
+- **云开发**：`wx.cloud.init` 照常执行，callFunction、数据库等调用返回 `fail`，errMsg 带上 `wxa-runner 不支持云开发`，控制台提示一次。云开发要以用户身份访问微信后台，浏览器里做不到
 - **TypeScript 编译插件**：不支持 `useCompilerPlugins` 里的 `typescript`，`.ts` 文件要先编译成 `.js`
 - **地图**：MapContext 的 toScreenLocation、fromScreenLocation、地面覆盖物等方法基础库的网页实现里没有，调用后不会回调（[设计文档](https://github.com/open-wxa/wxa-runner/blob/main/PROJECT_DESIGN.md#原生组件)）
 - **插件**：只支持插件页面，要加 `--devtools-login`；插件的自定义组件和 `requirePlugin` 暂不支持（[#56](https://github.com/open-wxa/wxa-runner/issues/56)）
