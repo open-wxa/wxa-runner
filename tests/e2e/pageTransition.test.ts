@@ -26,6 +26,8 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
     const navigate = () => page.evaluate(async () => {
       const api = window.__wxa_test_api__;
       const viewport = document.querySelector<HTMLElement>('.wxa-pages')!;
+      const navbar = document.querySelector<HTMLElement>('.wxa-navbar')!;
+      const tabBar = document.querySelector<HTMLElement>('.wxa-tabbar')!;
       const home = viewport.querySelector('iframe')!;
       const records: unknown[] = [];
       const animate = Element.prototype.animate;
@@ -36,7 +38,8 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
             current: this.hasAttribute('data-current'),
             frames: viewport.querySelectorAll('iframe').length,
             visible: Array.from(viewport.querySelectorAll('iframe')).filter(frame => frame.style.visibility === 'visible').length,
-            inert: viewport.inert
+            inert: viewport.inert,
+            navigationLocked: navbar.inert && tabBar.inert
           });
         }
         return animate.call(this, keyframes, options);
@@ -48,7 +51,8 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
           records,
           remaining: viewport.querySelectorAll('iframe').length,
           restored: home.hasAttribute('data-current'),
-          inert: viewport.inert
+          inert: viewport.inert,
+          navigationUnlocked: !navbar.inert && !tabBar.inert
         };
       } finally {
         Element.prototype.animate = animate;
@@ -57,16 +61,38 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
 
     expect(await navigate()).toEqual({
       records: [
-        { path: 'pages/detail/detail', current: true, frames: 2, visible: 2, inert: true },
-        { path: 'pages/detail/detail', current: true, frames: 3, visible: 2, inert: true },
-        { path: 'pages/detail/detail', current: false, frames: 2, visible: 2, inert: true }
+        { path: 'pages/detail/detail', current: true, frames: 2, visible: 2, inert: true, navigationLocked: true },
+        { path: 'pages/detail/detail', current: true, frames: 3, visible: 2, inert: true, navigationLocked: true },
+        { path: 'pages/detail/detail', current: false, frames: 2, visible: 2, inert: true, navigationLocked: true }
       ],
       remaining: 1,
       restored: true,
-      inert: false
+      inert: false,
+      navigationUnlocked: true
     });
 
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    expect(await navigate()).toEqual({ records: [], remaining: 1, restored: true, inert: false });
+    expect(await navigate()).toEqual({ records: [], remaining: 1, restored: true, inert: false, navigationUnlocked: true });
+  });
+
+  it('连点返回按钮只退出一页，转场后仍能再次返回', async () => {
+    const { page } = runner;
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await runner.open('/');
+    await page.evaluate(async () => {
+      const api = window.__wxa_test_api__;
+      await api.navigateTo('/pages/detail/detail?id=1');
+      await api.navigateTo('/pages/detail/detail?id=2');
+    });
+    const back = page.getByRole('button', { name: '返回', exact: true });
+    await back.dblclick();
+    const stack = await page.evaluate(async () => {
+      await (window as any).__wxaHost.enqueueRoute(async () => undefined);
+      return window.__wxa_test_api__.pageStack().map(entry => entry.query.id);
+    });
+    expect(stack).toEqual([undefined, '1']);
+
+    await back.click();
+    await page.waitForFunction(() => window.__wxa_test_api__.pageStack().length === 1);
   });
 });

@@ -39,7 +39,7 @@ export class PageStackRestore {
       await host.enqueueRoute(async () => {
         for (const { path, query } of this.saved.slice(1)) {
           const search = new URLSearchParams(query).toString();
-          const result = await host.navigateTo(search ? `${path}?${search}` : path);
+          const result = await host.navigateTo(search ? `${path}?${search}` : path, { animate: false });
           if (!String(result.errMsg).endsWith(':ok')) {
             console.warn(`[wxa-runner] 恢复页面栈时打不开 ${path}：${result.errMsg}`);
             return;

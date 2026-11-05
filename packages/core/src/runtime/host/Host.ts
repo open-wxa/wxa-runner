@@ -28,9 +28,9 @@ import { createUiApis } from './api/ui';
 import { createWebViewApis, iframeWebViews, WebViewInfo, WebViewWindows } from './api/webView';
 import { PageStack } from './PageStack';
 import { PageView } from './PageView';
-import { animatePageTransition, canAnimatePageTransition } from './ui/pageTransition';
 import { cloneInto, cloneNativeInto } from './realm';
 import { chooseFiles, hasUserActivation } from './ui/fileChooser';
+import { canAnimatePageTransition } from './ui/pageTransition';
 import { NavigationState, PhoneShell } from './ui/PhoneShell';
 
 export type OpenType = 'appLaunch' | 'navigateTo' | 'navigateBack' | 'redirectTo' | 'reLaunch' | 'switchTab';
@@ -352,7 +352,7 @@ export class Host implements HostApi {
     this.activate(page, 'appLaunch');
   }
 
-  async navigateTo(url: string): Promise<ApiResult> {
+  async navigateTo(url: string, { animate = true } = {}): Promise<ApiResult> {
     if (!this.stack.canPush()) return fail('navigateTo', 'webview count limit exceed');
     const { path, query } = this.resolveUrl(url);
     if (this.tabPaths.has(path)) return fail('navigateTo', 'can not navigateTo a tabbar page');
@@ -362,8 +362,8 @@ export class Host implements HostApi {
     const previous = this.currentPage();
     this.stack.push(page);
     this.activate(page, 'navigateTo');
-    if (this.info.pageTransition && previous && canAnimatePageTransition(previous.frame)) {
-      await animatePageTransition(previous.frame, page.frame, 'push');
+    if (animate && this.info.pageTransition && previous && canAnimatePageTransition(previous.frame)) {
+      await this.shell.transitionPages(previous.frame, page.frame, 'push');
     }
     return ok('navigateTo', { webviewId: page.id });
   }
@@ -380,7 +380,7 @@ export class Host implements HostApi {
     const target = this.currentPage()!;
     try {
       this.activate(target, 'navigateBack');
-      if (animate) await animatePageTransition(outgoing.frame, target.frame, 'pop');
+      if (animate) await this.shell.transitionPages(outgoing.frame, target.frame, 'pop');
     } finally {
       if (animate) this.closePage(outgoing);
     }
