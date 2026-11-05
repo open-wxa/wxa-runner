@@ -13,14 +13,16 @@ export async function animatePageTransition(
   if (!viewport || previous.parentElement !== viewport) return;
 
   const { visibility, zIndex } = previous.style;
-  const wasInert = viewport.inert;
+  // 在渲染文档内锁定交互，iframe 内的命中检测也能看到页面不可点击。
+  const pages = [previous, current].map(frame => frame.contentDocument?.documentElement ?? frame);
+  const wasInert = pages.map(page => page.inert);
   const sliding = direction === 'push' ? current : previous;
   const transform = direction === 'push' ? ['translateX(100%)', 'translateX(0)'] : ['translateX(0)', 'translateX(100%)'];
   let animation: Animation | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     // activate 已更新逻辑上的当前页。旧页仅参与绘制，转场期间页面区域不可交互。
-    viewport.inert = true;
+    for (const page of pages) page.inert = true;
     previous.style.visibility = 'visible';
     if (direction === 'pop') previous.style.zIndex = '2';
     animation = sliding.animate({ transform }, { duration: DURATION, easing: 'ease', fill: 'both' });
@@ -34,6 +36,6 @@ export async function animatePageTransition(
     animation?.cancel();
     previous.style.visibility = visibility;
     previous.style.zIndex = zIndex;
-    viewport.inert = wasInert;
+    pages.forEach((page, index) => { page.inert = wasInert[index]; });
   }
 }

@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { e2eReady, Runner, startRunner } from './runner';
+import { e2eReady, expectText, Runner, startRunner } from './runner';
 
 const project = {
   'app.json': { pages: ['pages/index/index', 'pages/detail/detail'] },
-  'pages/index/index.js': 'Page({});',
-  'pages/index/index.wxml': '<view>Home</view>',
-  'pages/detail/detail.js': 'Page({});',
-  'pages/detail/detail.wxml': '<view>Detail</view>'
+  'pages/index/index.js': 'Page({ open() { wx.navigateTo({ url: "/pages/detail/detail" }); } });',
+  'pages/index/index.wxml': '<button id="open" bindtap="open">Open detail</button>',
+  'pages/detail/detail.js': 'Page({ data: { count: 0 }, increment() { this.setData({ count: this.data.count + 1 }); } });',
+  'pages/detail/detail.wxml': '<button id="increment" bindtap="increment">Increment</button><view id="count">{{count}}</view>'
 };
 
 describe.skipIf(!e2eReady)('页面滑动过渡', () => {
@@ -18,6 +18,16 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
 
   afterAll(async () => {
     await runner?.close();
+  });
+
+  it('跳转后立即点击新页面，点击在转场结束后送达一次', async () => {
+    const { page } = runner;
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const home = await runner.open('/');
+    await home.locator('#open').click({ timeout: 5000 });
+    await page.frameLocator('iframe[data-current]').locator('#increment').click({ timeout: 5000 });
+    const { frameName } = (await page.evaluate(() => window.__wxa_test_api__.currentPage()))!;
+    await expectText(page.frame({ name: frameName })!, '#count', '1');
   });
 
   it('前进保留原页，多级返回只保留退出页到动画结束，并尊重减少动态效果设置', async () => {
@@ -33,12 +43,14 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
       const animate = Element.prototype.animate;
       Element.prototype.animate = function (keyframes, options) {
         if (this instanceof HTMLIFrameElement && this.parentElement === viewport) {
+          const frames = Array.from(viewport.querySelectorAll('iframe'));
+          const visible = frames.filter(frame => frame.style.visibility === 'visible');
           records.push({
             path: this.dataset.path,
             current: this.hasAttribute('data-current'),
-            frames: viewport.querySelectorAll('iframe').length,
-            visible: Array.from(viewport.querySelectorAll('iframe')).filter(frame => frame.style.visibility === 'visible').length,
-            inert: viewport.inert,
+            frames: frames.length,
+            visible: visible.length,
+            inert: visible.every(frame => frame.contentDocument!.documentElement.inert),
             navigationLocked: navbar.inert && tabBar.inert
           });
         }
@@ -51,7 +63,7 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
           records,
           remaining: viewport.querySelectorAll('iframe').length,
           restored: home.hasAttribute('data-current'),
-          inert: viewport.inert,
+          inert: home.contentDocument!.documentElement.inert,
           navigationUnlocked: !navbar.inert && !tabBar.inert
         };
       } finally {
