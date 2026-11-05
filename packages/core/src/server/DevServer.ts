@@ -91,6 +91,8 @@ export interface DevServerOptions {
   baseLibCacheDir?: string;
   watch?: boolean;
   device?: Partial<DeviceProfile>;
+  /** navigateTo / navigateBack 时滑动页面内容，默认 false */
+  pageTransition?: boolean;
   /**
    * 小程序启动前执行的 setup 文件；默认使用项目目录下的 wxa.setup.ts / .js / .mjs，传 false 不使用
    * 环境变量在构造时读取，只暴露 WXA_ 前缀的变量
@@ -303,6 +305,7 @@ export class DevServer {
         appid: this.project.appid,
         baseLibVersion: this.baseLib.version,
         device: this.device,
+        pageTransition: this.options.pageTransition ?? false,
         devtoolsLogin: this.devtoolsLogin,
         socketProxy: true,
         forwardConsole: this.options.forwardConsole ?? false,

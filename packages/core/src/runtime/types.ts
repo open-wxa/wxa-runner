@@ -57,6 +57,8 @@ export interface AppInfo {
   wxConfig: Record<string, any>;
   pages: string[];
   device: DeviceProfile;
+  /** navigateTo / navigateBack 时滑动页面内容，默认 false */
+  pageTransition?: boolean;
   /** 开启了 --devtools-login */
   devtoolsLogin?: boolean;
   /** 开发服务器提供 WebSocket 请求头转发；静态查看器未提供时保持直连 */

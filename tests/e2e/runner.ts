@@ -55,6 +55,7 @@ export interface RunnerOptions {
   /** 开启 --devtools-login；不想依赖本机登录态时用 page.route 拦截 /__wxa__/api/* */
   devtoolsLogin?: boolean;
   forwardConsole?: DevServerOptions['forwardConsole'];
+  pageTransition?: boolean;
   /** 开发服务器的终端输出，默认丢弃 */
   logger?: DevServerOptions['logger'];
   /** 开发工具用的扩展点 */
@@ -85,6 +86,7 @@ export async function startRunner(project: Record<string, string | object> | str
     baseLibCacheDir: options.baseLibCacheDir,
     devtoolsLogin: options.devtoolsLogin,
     forwardConsole: options.forwardConsole,
+    pageTransition: options.pageTransition,
     webViewWindow: options.webViewWindow,
     runtimeDir: RUNTIME_DIR,
     logger: options.logger ?? { log: () => undefined, warn: () => undefined, error: () => undefined },

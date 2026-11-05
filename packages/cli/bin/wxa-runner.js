@@ -28,6 +28,7 @@ program
   .option('--setup <file>', '小程序启动前执行的 setup 文件（默认使用项目目录下的 wxa.setup.ts / .js / .mjs）')
   .option('--no-setup', '不执行 setup 文件')
   .option('--no-watch', '不监听文件变化')
+  .option('--page-transition', '在 navigateTo 和 navigateBack 时播放页面滑动过渡')
   .option('-o, --open', '启动后打开浏览器')
   .option('--forward-console', '浏览器里的 console.warn / console.error 也转发到终端（检测到编程助手时默认开启）')
   .option('--no-forward-console', '浏览器里的报错不转发到终端')
@@ -52,6 +53,7 @@ program
         baseLibVersion: options.baselib,
         setup: options.setup,
         watch: options.watch,
+        pageTransition: options.pageTransition,
         devtoolsLogin: options.devtoolsLogin,
         realLogin: options.realLogin,
         forwardConsole: forward.mode,
