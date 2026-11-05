@@ -359,6 +359,14 @@ describe('其它 API', () => {
     expect(call(apis, 'getAppContact', { keyPath: 'WxaAppInfo.Name' }).errMsg).toBe('getAppContact:ok');
   });
 
+  it('其余 operateWXData 的成功结果和原生一样带着 data：2.32.3 的基础库直接解构它', () => {
+    expect(call(apis, 'operateWXData', { data: { api_name: 'getSubjectalterInfo', data: {} } })).toEqual({ errMsg: 'operateWXData:ok', data: {} });
+  });
+
+  it('基础库内部的实验开关都不开：testConfig 和原生一样是空字符串', () => {
+    expect(call(apis, 'getABTestConfig', { experimentId: 'clicfg_x', experimentType: 'Expt' })).toEqual({ errMsg: 'getABTestConfig:ok', testConfig: '' });
+  });
+
   it('基础库做隐私检查时拿到「不用弹窗、没有未授权的接口」，业务调用的接口照常执行', () => {
     const res = call(apis, 'operateWXData', { data: { api_name: 'webapi_getwxauserprivacyauthinfo', data: { version: 3 } } });
     expect(res.errMsg).toBe('operateWXData:ok');
@@ -519,7 +527,7 @@ describe('开发者工具登录态（--devtools-login）', () => {
 
   it('开启 --devtools-login后，基础库拉取配置的 operateWXData 不发给开发服务器', () => {
     const { result, fetchMock } = invoke('operateWXData', json({}), { data: { api_name: 'webapi_getwxabusinessconfig' } });
-    expect(result).toEqual({ errMsg: 'operateWXData:ok' });
+    expect(result).toEqual({ errMsg: 'operateWXData:ok', data: {} });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
