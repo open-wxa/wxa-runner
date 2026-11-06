@@ -46,7 +46,7 @@ import { ignoreConsoleHook, printBrowserReports } from './forwardConsole';
 import { handleProxy } from './proxy';
 import { createSocketProxy } from './socketProxy';
 import { planHotUpdate } from './hmr';
-import { developerTicketSource, TicketSource } from './developerTicket';
+import { DevtoolsSession, devtoolsSession, TicketNotAllowed, TicketSource } from './developerTicket';
 import { AppBuild, PluginStore } from './plugins';
 import { devtoolsLoginRouter } from './devtoolsLogin';
 import { requireUsableTicket, WechatDevClient } from './wechatDev';
@@ -155,6 +155,7 @@ export class DevServer {
   private readonly fileSessions = new Map<string, FileStore>();
   private readonly devtoolsLogin: boolean;
   /** 开启 --devtools-login 时才有 */
+  private readonly devtools: DevtoolsSession | null;
   private readonly ticketSource: TicketSource | null;
   private readonly plugins: PluginStore;
 
@@ -180,7 +181,8 @@ export class DevServer {
       this.logger.warn(`[wxa-runner] 基础库 ${this.baseLib.version} 高于已验证的版本范围，可能无法正常运行`);
     }
     this.devtoolsLogin = options.devtoolsLogin === true;
-    this.ticketSource = this.devtoolsLogin ? developerTicketSource(this.project.projectPath, this.logger) : null;
+    this.devtools = this.devtoolsLogin ? devtoolsSession(this.project.projectPath, this.logger) : null;
+    this.ticketSource = this.devtools?.findTicket ?? null;
     this.plugins = new PluginStore(this.ticketSource && new WechatDevClient(this.project.appid, this.ticketSource), this.logger);
     this.device = { ...DEFAULT_DEVICE, ...options.device };
     this.builder = new AppBuilder(this.project, { wxmlTransform: extended.wxmlTransform });
@@ -255,7 +257,11 @@ export class DevServer {
     // 启动时先取一次：新版开发者工具要先为项目开启自动化接口，第一次 wx.login 就不用等；不可用时在终端提示原因
     this.ticketSource?.()
       .then(requireUsableTicket)
-      .catch(error => this.logger.warn(`[wxa-runner] 开发者工具的登录态暂不可用（--devtools-login）：${error.message}`));
+      .catch(error => {
+        // 微信后台不给这个 appid 票据时取不到是常态，wx.login 会退回模拟器并在那时提示一次，不必报成「暂不可用」
+        if (error instanceof TicketNotAllowed && this.devtools?.loginCode) return;
+        this.logger.warn(`[wxa-runner] 开发者工具的登录态暂不可用（--devtools-login）：${error.message}`);
+      });
     return this.address;
   }
 
@@ -461,7 +467,7 @@ export class DevServer {
       }
     });
 
-    if (this.ticketSource) app.use('/__wxa__/api', devtoolsLoginRouter(this.project.appid, this.ticketSource));
+    if (this.devtools) app.use('/__wxa__/api', devtoolsLoginRouter(this.project.appid, this.devtools.findTicket, this.devtools.loginCode));
 
     // 渲染层页面路径下的相对资源（如 ../../images/a.png）
     app.use('/__wxa__/webview', express.static(root));
