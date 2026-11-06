@@ -10,15 +10,17 @@ export async function animatePageTransition(
   direction: 'push' | 'pop'
 ): Promise<void> {
   const viewport = current.parentElement;
-  const head = current.contentDocument?.head;
-  if (!viewport || previous.parentElement !== viewport || !head) return;
+  const body = current.contentDocument?.body;
+  if (!viewport || previous.parentElement !== viewport || !body) return;
 
   const { visibility, zIndex } = previous.style;
   const outgoing = previous.contentDocument?.documentElement ?? previous;
   const wasInert = outgoing.inert;
-  // 新页面只阻止指针命中。限制要在 iframe 内生效，同时让基础库正常聚焦输入框。
-  const pointerLock = head.ownerDocument.createElement('style');
-  pointerLock.textContent = '* { pointer-events: none !important; }';
+  // 在 iframe 内拦住指针命中，让自动化等待转场，也让基础库正常聚焦输入框。
+  const shield = body.ownerDocument.createElement('div');
+  shield.className = 'wxa-page-transition-shield';
+  shield.setAttribute('aria-hidden', 'true');
+  shield.style.cssText = 'position: fixed; inset: 0; z-index: 2147483647; pointer-events: auto; background: transparent;';
   const sliding = direction === 'push' ? current : previous;
   const transform = direction === 'push' ? ['translateX(100%)', 'translateX(0)'] : ['translateX(0)', 'translateX(100%)'];
   let animation: Animation | undefined;
@@ -26,7 +28,7 @@ export async function animatePageTransition(
   try {
     // activate 已更新逻辑上的当前页，旧页只参与绘制。
     outgoing.inert = true;
-    head.append(pointerLock);
+    body.append(shield);
     previous.style.visibility = 'visible';
     if (direction === 'pop') previous.style.zIndex = '2';
     animation = sliding.animate({ transform }, { duration: DURATION, easing: 'ease', fill: 'both' });
@@ -41,6 +43,6 @@ export async function animatePageTransition(
     previous.style.visibility = visibility;
     previous.style.zIndex = zIndex;
     outgoing.inert = wasInert;
-    pointerLock.remove();
+    shield.remove();
   }
 }

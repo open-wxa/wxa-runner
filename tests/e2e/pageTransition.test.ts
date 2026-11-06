@@ -6,7 +6,7 @@ const project = {
   'pages/index/index.js': 'Page({ open() { wx.navigateTo({ url: "/pages/detail/detail" }); } });',
   'pages/index/index.wxml': '<button id="open" bindtap="open">Open detail</button>',
   'pages/detail/detail.js': 'Page({ data: { count: 0 }, increment() { this.setData({ count: this.data.count + 1 }); } });',
-  'pages/detail/detail.wxml': '<button id="increment" bindtap="increment">Increment</button><view id="count">{{count}}</view>',
+  'pages/detail/detail.wxml': '<button id="increment" style="pointer-events: auto !important" bindtap="increment">Increment</button><view id="count">{{count}}</view>',
   'pages/input/input.js': 'Page({ data: { autoFocus: true, value: "" }, update(event) { this.setData({ value: event.detail.value }); } });',
   'pages/input/input.wxml': '<input focus="{{autoFocus}}" bindinput="update"/><view id="value">{{value}}</view>'
 };
@@ -55,7 +55,7 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
             frames: frames.length,
             visible: visible.length,
             outgoingInert: outgoing.contentDocument!.documentElement.inert,
-            incomingPointerEvents: getComputedStyle(incoming.contentDocument!.documentElement).pointerEvents,
+            incomingShielded: incoming.contentDocument!.elementFromPoint(8, 8)?.classList.contains('wxa-page-transition-shield'),
             navigationLocked: navbar.inert && tabBar.inert
           });
         }
@@ -69,7 +69,7 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
           remaining: viewport.querySelectorAll('iframe').length,
           restored: home.hasAttribute('data-current'),
           homeInteractive: !home.contentDocument!.documentElement.inert &&
-            getComputedStyle(home.contentDocument!.documentElement).pointerEvents !== 'none',
+            !home.contentDocument!.querySelector('.wxa-page-transition-shield'),
           navigationUnlocked: !navbar.inert && !tabBar.inert
         };
       } finally {
@@ -79,9 +79,9 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
 
     expect(await navigate()).toEqual({
       records: [
-        { path: 'pages/detail/detail', current: true, frames: 2, visible: 2, outgoingInert: true, incomingPointerEvents: 'none', navigationLocked: true },
-        { path: 'pages/detail/detail', current: true, frames: 3, visible: 2, outgoingInert: true, incomingPointerEvents: 'none', navigationLocked: true },
-        { path: 'pages/detail/detail', current: false, frames: 2, visible: 2, outgoingInert: true, incomingPointerEvents: 'none', navigationLocked: true }
+        { path: 'pages/detail/detail', current: true, frames: 2, visible: 2, outgoingInert: true, incomingShielded: true, navigationLocked: true },
+        { path: 'pages/detail/detail', current: true, frames: 3, visible: 2, outgoingInert: true, incomingShielded: true, navigationLocked: true },
+        { path: 'pages/detail/detail', current: false, frames: 2, visible: 2, outgoingInert: true, incomingShielded: true, navigationLocked: true }
       ],
       remaining: 1,
       restored: true,
