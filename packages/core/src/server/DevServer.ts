@@ -105,8 +105,6 @@ export interface DevServerOptions {
    * 要先登录开发者工具，会真实请求微信
    */
   devtoolsLogin?: boolean;
-  /** @deprecated 改名为 devtoolsLogin */
-  realLogin?: boolean;
   /**
    * 把浏览器里的报错打印到终端：'errors' 转发运行时错误和未实现 API 的提醒，'all' 再加上 console.warn / console.error。
    * 默认不转发；命令行默认 'errors'，检测到编程助手时 'all'
@@ -181,10 +179,7 @@ export class DevServer {
     if (!this.baseLib.compatible) {
       this.logger.warn(`[wxa-runner] 基础库 ${this.baseLib.version} 高于已验证的版本范围，可能无法正常运行`);
     }
-    if (options.realLogin !== undefined && options.devtoolsLogin === undefined) {
-      this.logger.warn('[wxa-runner] realLogin（--real-login）已改名为 devtoolsLogin（--devtools-login），旧名以后会移除');
-    }
-    this.devtoolsLogin = (options.devtoolsLogin ?? options.realLogin) === true;
+    this.devtoolsLogin = options.devtoolsLogin === true;
     this.ticketSource = this.devtoolsLogin ? developerTicketSource(this.project.projectPath, this.logger) : null;
     this.plugins = new PluginStore(this.ticketSource && new WechatDevClient(this.project.appid, this.ticketSource), this.logger);
     this.device = { ...DEFAULT_DEVICE, ...options.device };

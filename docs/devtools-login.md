@@ -14,7 +14,7 @@ description: 用 --devtools-login 借本机微信开发者工具的登录态访�
 wxa-runner dev ./dist/dev/mp-weixin --devtools-login
 ```
 
-以前叫 `--real-login`（Playwright 的 `wxaServerOptions` 里是 `realLogin`），旧名暂时仍可用，启动时提示改用新名。
+以前叫 `--real-login`（Playwright 的 `wxaServerOptions` 里是 `realLogin`），旧名已移除。
 
 ## 开启前的准备
 

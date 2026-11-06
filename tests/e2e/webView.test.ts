@@ -151,7 +151,7 @@ describe.skipIf(!e2eReady)('web-view 跨站提示', () => {
     const crossSite = warnings.filter(text => text.startsWith('[wxa-runner] web-view'));
     expect(crossSite).toHaveLength(1);
     expect(crossSite[0]).toContain(h5.origin);
-    expect(crossSite[0]).toContain('--webview-window');
+    expect(crossSite[0]).toContain('webViewWindow: true');
   });
 });
 

@@ -32,6 +32,16 @@ wxa-runner 运行 uni-app 编译出的 `mp-weixin` 目录，由微信官方基�
 npx wxa-runner dev ./dist/dev/mp-weixin --setup ./wxa.setup.ts
 ```
 
+也可以写进源码根目录的[配置文件](./cli.md#配置文件) `wxa.config.ts`，之后只要 `npx wxa-runner dev`：
+
+```ts
+// wxa.config.ts
+export default {
+  project: './dist/dev/mp-weixin',
+  setup: './wxa.setup.ts'
+};
+```
+
 ## 写 E2E 测试
 
 **1. 安装**

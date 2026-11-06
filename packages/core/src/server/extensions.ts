@@ -1,6 +1,6 @@
 /**
  * 开发服务器扩展：检查器这类开发工具把要用的扩展点打包成一个扩展，
- * 由 DevServer 的 extensions 选项或命令行的 --extension 加载。runner 只认这个约定，不认识具体的工具。
+ * 由 DevServer 的 extensions 选项、命令行的 --extension 或配置文件的 extensions 加载。runner 只认这个约定，不认识具体的工具。
  *
  * （「插件」在 runner 里指小程序插件，见 plugins.ts，所以这里叫扩展）
  */

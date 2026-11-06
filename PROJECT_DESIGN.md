@@ -98,6 +98,7 @@ wxa-runner/
 │   │       │   ├── ignoreList.ts      # 基础库脚本加入 DevTools 忽略列表的 source map
 │   │       │   ├── proxy.ts           # wx.request 等的转发代理
 │   │       │   ├── setup.ts           # 查找、打包 setup 文件，收集 WXA_ 环境变量
+│   │       │   ├── config.ts          # 命令行的配置文件 wxa.config.*：查找、加载（.ts 先转成 JS）、路径换成绝对路径
 │   │       │   ├── devtoolsLogin.ts   # --devtools-login 的接口：登录、手机号，服务市场和插件的请求转发
 │   │       │   ├── wechatDev.ts       # 借开发者登录态访问微信后台：ticket、超时、错误提示统一处理
 │   │       │   ├── plugins.ts         # 插件：借开发者登录态下载插件代码，插件页面并入小程序
@@ -125,6 +126,7 @@ wxa-runner/
 │   │               └── ui/            # 手机外壳：状态栏、导航栏、tabBar、toast、modal、actionSheet、选择器、图片预览、文件选择框
 │   │
 │   ├── cli/bin/wxa-runner.js          # wxa-runner：命令行（npm 包名不带 scope，npx wxa-runner 直接可用）
+│   ├── cli/index.d.ts                 # wxa-runner 只导出类型：配置文件里 import type { WxaConfig } from 'wxa-runner'
 │   │
 │   └── playwright/                    # @open-wxa/wxa-runner-playwright：Playwright fixture
 │       └── src/
@@ -634,7 +636,7 @@ Service Worker 用 Static Routing API 让其余请求直接走网络，不经过
 返回 `webviewScripts`、`middlewares`、`wxmlTransform`，以及可选的 `entry`（扩展自己的页面）。`DevServer` 的 `extensions` 选项接收扩展，
 按顺序合并在直接给出的选项之后：脚本和中间件依次拼接，wxml 转换依次串起来。「插件」在 runner 里指小程序插件，所以这里叫扩展。
 
-命令行的 `--extension <模块>` 从用户项目（项目目录、当前目录，最后是 runner 自身）加载扩展——它是用户项目的开发依赖，
+命令行的 `--extension <模块>` 和配置文件 `extensions` 里写的包名从用户项目（配置文件所在目录、项目目录、当前目录，最后是 runner 自身）加载扩展——它是用户项目的开发依赖，
 pnpm 不提升依赖时从 runner 的安装位置找不到。按 `require` 的规则解析入口，用 `import()` 加载，所以 CommonJS 和 ES 模块都可以，
 但 `exports` 要提供 `require` 或 `default` 条件。模块的默认导出可以是扩展，也可以是不带参数调用后返回扩展的函数。
 扩展的 `entry` 打印在启动信息里，`--open` 打开第一个。

@@ -26,11 +26,13 @@
   "bugs": {
     "url": "https://github.com/open-wxa/wxa-runner/issues"
   },
+  "types": "./index.d.ts",
   "bin": {
     "wxa-runner": "./bin/wxa-runner.js"
   },
   "files": [
-    "bin"
+    "bin",
+    "index.d.ts"
   ],
   "scripts": {
     "dev": "node bin/wxa-runner.js"

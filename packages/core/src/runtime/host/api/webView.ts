@@ -10,7 +10,7 @@
  * - 网页和宿主域名不同时，浏览器按跨站嵌入处理：SameSite 为 Lax、Strict 或没写的 Cookie 存不下、也不发送，
  *   网页的登录态因此失效。微信里 web-view 是独立的原生网页视图，没有这个问题
  *
- * 新窗口模式（--webview-window）把网页放到新窗口里打开，网页是顶层页面，绕开这两个限制，见 WebViewWindows
+ * 新窗口模式（配置文件的 webViewWindow）把网页放到新窗口里打开，网页是顶层页面，绕开这两个限制，见 WebViewWindows
  */
 
 import type { DeviceProfile } from '../../types';
@@ -360,7 +360,7 @@ function warnCrossSite(src: string) {
   console.warn(
     `[wxa-runner] web-view 加载的 ${url.origin} 与模拟器（${location.origin}）不是同一个站点，浏览器按跨站嵌入处理，` +
       `网页的 Cookie 可能不生效（微信里的小程序没有这个问题）。需要 Cookie 时让网页在新窗口打开：` +
-      `命令行加 --webview-window，Playwright 用 test.use({ wxaWebView: 'window' })`
+      `配置文件 wxa.config.ts 里写 webViewWindow: true，Playwright 用 test.use({ wxaWebView: 'window' })`
   );
 }
 

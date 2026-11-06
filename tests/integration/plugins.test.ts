@@ -38,7 +38,7 @@ describe.skipIf(!ready)('插件代码', () => {
   });
 
   /** 启动用到插件的小程序；wechat 决定微信对下载请求的响应 */
-  async function start(options: { devtoolsLogin?: boolean; realLogin?: boolean; wechat?: () => Response }) {
+  async function start(options: { devtoolsLogin?: boolean; wechat?: () => Response }) {
     const downloads: Array<{ url: URL; body: any }> = [];
     const realFetch = globalThis.fetch;
     vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
@@ -60,7 +60,6 @@ describe.skipIf(!ready)('插件代码', () => {
       port: 0,
       watch: false,
       devtoolsLogin: options.devtoolsLogin,
-      realLogin: options.realLogin,
       runtimeDir: RUNTIME_DIR,
       logger: { log: () => undefined, warn: (message: string) => warnings.push(message), error: (message: string) => warnings.push(message) }
     });
@@ -155,17 +154,6 @@ describe.skipIf(!ready)('插件代码', () => {
     await get('/__wxa__/app-info.json');
 
     expect(warnings.join('\n')).toMatch(/插件 hello（wxplugin00000001@1\.0\.0）.*40001.*请在微信开发者工具里重新登录/);
-  });
-
-  it('旧选项 realLogin（--real-login）照常生效，终端提示改用 devtoolsLogin（--devtools-login）', async () => {
-    const { get, downloads, warnings } = await start({ realLogin: true });
-
-    const info = await (await get('/__wxa__/app-info.json')).json();
-
-    expect(info.devtoolsLogin).toBe(true);
-    expect(info.pages).toContain(PLUGIN_PAGE);
-    expect(downloads).toHaveLength(1);
-    expect(warnings.join('\n')).toMatch(/realLogin（--real-login）已改名为 devtoolsLogin（--devtools-login）/);
   });
 
   it('微信拒绝下载时（如插件申请还没通过），终端说明是哪个插件和原因，小程序自己的页面照常可用', async () => {
