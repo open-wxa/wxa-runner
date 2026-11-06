@@ -1,5 +1,23 @@
 # 更新日志
 
+## [0.13.0](https://github.com/open-wxa/wxa-runner/compare/v0.12.4...v0.13.0) (2026-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* 移除 --real-login 和 DevServerOptions.realLogin，改用 --devtools-login / devtoolsLogin； 移除 --page-transition，改在配置文件写 pageTransition: true。
+
+### 新功能
+
+* --devtools-login 取不到票据时 wx.login 改走模拟器 ([#121](https://github.com/open-wxa/wxa-runner/issues/121)) ([#122](https://github.com/open-wxa/wxa-runner/issues/122)) ([8478a92](https://github.com/open-wxa/wxa-runner/commit/8478a927244dacf3f728da8157637f2964c239ff))
+* dev 支持配置文件 wxa.config.ts，命令行只留临时参数 ([#120](https://github.com/open-wxa/wxa-runner/issues/120)) ([aa19530](https://github.com/open-wxa/wxa-runner/commit/aa19530a6aa62e44fdc16ac62b48660c5bd03fe1))
+* 支持可选的页面滑动转场 ([#113](https://github.com/open-wxa/wxa-runner/issues/113)) ([3344111](https://github.com/open-wxa/wxa-runner/commit/3344111935c57763ec9ba6e5430dd1abd5314482))
+
+
+### 问题修复
+
+* 防止触摸打开的弹层被同一次点击关闭 ([3deb00e](https://github.com/open-wxa/wxa-runner/commit/3deb00e41e90f4604d0b6fa95822a58b5c7cd828))
+
 ## [0.12.4](https://github.com/open-wxa/wxa-runner/compare/v0.12.3...v0.12.4) (2026-11-05)
 
 
