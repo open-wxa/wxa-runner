@@ -13,6 +13,7 @@
 
 import express, { NextFunction, Request, Response, Router } from 'express';
 import { findDeveloperTicket } from '@open-wxa/wxa-runner-extractor';
+import { TicketNotAllowed } from './developerTicket';
 import { explainErrcode, FindTicket, requireOk, WechatDevClient } from './wechatDev';
 
 const LOOPBACK_ADDRESSES = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
@@ -26,16 +27,23 @@ const FORWARDED_WX_DATA_APIS = ['webapi_servicemarket_jsapi_comm'];
 
 /**
  * @param findTicket 每次请求都重新查找：开发者工具重新登录、切换账号后不用重启服务器
+ * @param loginCode 微信后台不给这个 appid 取 ticket 时，wx.login 退回让开发者工具的模拟器自己调。手机号等没有这条路
  */
-export function devtoolsLoginRouter(appid: string, findTicket: FindTicket = findDeveloperTicket): Router {
+export function devtoolsLoginRouter(appid: string, findTicket: FindTicket = findDeveloperTicket, loginCode?: (() => Promise<string>) | null): Router {
   const wechat = new WechatDevClient(appid, findTicket);
   const router = express.Router();
   router.use(onlyLoopback);
 
   router.post('/login', respond(async () => {
-    const body = requireOk(await wechat.postJson('wxa-dev-logic/jslogin', { scope: ['snsapi_base'] }), '微信登录失败');
-    if (!body.code) throw new Error('微信登录失败：微信没有返回 code');
-    return { code: body.code };
+    try {
+      const body = requireOk(await wechat.postJson('wxa-dev-logic/jslogin', { scope: ['snsapi_base'] }), '微信登录失败');
+      if (!body.code) throw new Error('微信登录失败：微信没有返回 code');
+      return { code: body.code };
+    } catch (error) {
+      // 只有取不到 ticket 这一种情况才换路；别的失败（账号不是开发者、网络不通）原因照旧报出来
+      if (!loginCode || !(error instanceof TicketNotAllowed)) throw error;
+      return { code: await loginCode() };
+    }
   }));
 
   router.post('/phone-number', respond(async () => {

@@ -20,7 +20,7 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TICKET_ENV } from '../../packages/extractor/src/devtools';
-import { developerTicketSource } from '../../packages/core/src/server/developerTicket';
+import { devtoolsSession } from '../../packages/core/src/server/developerTicket';
 import { devtoolsLoginRouter } from '../../packages/core/src/server/devtoolsLogin';
 import { createProject } from '../helpers';
 
@@ -188,7 +188,8 @@ function stubWechat(): string[] {
 /** 按开发服务器的方式挂上开发者工具登录态的接口，返回调用 wx.login 的函数 */
 async function serveDevtoolsLogin(projectPath: string) {
   const app = express();
-  app.use('/__wxa__/api', devtoolsLoginRouter('wx-app', developerTicketSource(projectPath, SILENT)));
+  const devtools = devtoolsSession(projectPath, SILENT);
+  app.use('/__wxa__/api', devtoolsLoginRouter('wx-app', devtools.findTicket, devtools.loginCode));
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   cleanups.push(() => new Promise(resolve => server.close(resolve)));
@@ -333,9 +334,13 @@ describe('新版开发者工具（Electron）', () => {
 
   it('开发者工具不允许获取登录票据时，告诉开发者在哪里打开，不请求微信', async () => {
     const devtools = installDevtools('electron');
-    devtools.reply(
-      agentStarted((await startAutomator(() => automatorError('ticket is not allow to get, navigate to security settings and turn it on'))).port)
+    // 模拟器那条路故意给成功：本机设置没开是用户能自己解决的，不该悄悄换路把问题盖掉
+    const automator = await startAutomator(method =>
+      method === 'App.callWxMethod'
+        ? { result: { result: { code: 'code-from-simulator', errMsg: 'login:ok' } } }
+        : automatorError('ticket is not allow to get, navigate to security settings and turn it on')
     );
+    devtools.reply(agentStarted(automator.port));
     const login = await serveDevtoolsLogin(createProject({}));
     const wechat = stubWechat();
 
@@ -344,6 +349,78 @@ describe('新版开发者工具（Electron）', () => {
     expect(status).toBe(500);
     expect(body.error).toContain('设置 → 安全设置');
     expect(body.error).toContain('允许获取工具登录票据');
+    expect(wechat).toEqual([]);
+  });
+
+  it('appid 不在微信后台的白名单里时，wx.login 让模拟器自己调，不请求微信', async () => {
+    const devtools = installDevtools('electron');
+    const automator = await startAutomator(method =>
+      method === 'App.callWxMethod'
+        ? { result: { result: { code: 'code-from-simulator', errMsg: 'login:ok' } } }
+        : automatorError('ticket is not allow to get')
+    );
+    devtools.reply(agentStarted(automator.port));
+    const login = await serveDevtoolsLogin(createProject({}));
+    const wechat = stubWechat();
+
+    const { status, body } = await login();
+
+    expect(status).toBe(200);
+    expect(body.code).toBe('code-from-simulator');
+    // 没有 ticket，根本没法请求微信后台
+    expect(wechat).toEqual([]);
+  });
+
+  it('项目窗口还没登记好时，等它就绪再让模拟器调 wx.login', async () => {
+    const devtools = installDevtools('electron');
+    let calls = 0;
+    const automator = await startAutomator(method => {
+      if (method !== 'App.callWxMethod') return automatorError('ticket is not allow to get');
+      // 开启自动化后窗口要过一会儿才登记好，这之前实测就是这句
+      calls += 1;
+      return calls === 1
+        ? automatorError('GUI project window is not found for project /x')
+        : { result: { result: { code: 'code-from-simulator', errMsg: 'login:ok' } } };
+    });
+    devtools.reply(agentStarted(automator.port));
+    const login = await serveDevtoolsLogin(createProject({}));
+
+    const { status, body } = await login();
+
+    expect(status).toBe(200);
+    expect(body.code).toBe('code-from-simulator');
+    expect(calls).toBe(2);
+  });
+
+  it('白名单之外且模拟器也取不到 code 时，说清是微信后台不给票据', async () => {
+    const devtools = installDevtools('electron');
+    const automator = await startAutomator(method =>
+      method === 'App.callWxMethod' ? { result: { result: { errMsg: 'login:fail' } } } : automatorError('ticket is not allow to get')
+    );
+    devtools.reply(agentStarted(automator.port));
+    const login = await serveDevtoolsLogin(createProject({}));
+    const wechat = stubWechat();
+
+    const { status, body } = await login();
+
+    expect(status).toBe(500);
+    expect(body.error).toContain('login:fail');
+    expect(wechat).toEqual([]);
+  });
+
+  it('取票据失败不是白名单的缘故时，不换成模拟器那条路，照旧报原因', async () => {
+    const devtools = installDevtools('electron');
+    const automator = await startAutomator(method =>
+      method === 'App.callWxMethod' ? { result: { result: { code: 'code-from-simulator', errMsg: 'login:ok' } } } : automatorError('need to login')
+    );
+    devtools.reply(agentStarted(automator.port));
+    const login = await serveDevtoolsLogin(createProject({}));
+    const wechat = stubWechat();
+
+    const { status, body } = await login();
+
+    expect(status).toBe(500);
+    expect(body.error).toContain('未登录');
     expect(wechat).toEqual([]);
   });
 

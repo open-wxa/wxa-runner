@@ -6,6 +6,9 @@
  * 再通过自动化协议的 Tool.getTicket 取当前生效的 ticket。旧版（package.nw）照旧读磁盘上的登录数据。
  *
  * 不调用 Tool.refreshTicket：刷新会让别人手里的 ticket 立即作废，ticket 过期时开发者工具取的时候会自己刷新。
+ *
+ * 能不能取 ticket 由微信后台按 appid 下发，没开的 appid 在开发者工具里也看不到那个设置项。
+ * 这时 wx.login 还有一条路：自动化协议的 App.callWxMethod 不查这道白名单，让模拟器自己调 wx.login 取 code。
  */
 
 import { execFile } from 'child_process';
@@ -25,18 +28,28 @@ const CLI_TIMEOUT = 60_000;
  * 请求不报错而是一直挂着，超时就当自动化接口失效，重新开启
  */
 const AUTOMATOR_TIMEOUT = 5_000;
+/** 让模拟器调 wx.login 要向微信请求，平时 0.5s；项目窗口刚打开还在编译时要等编译完 */
+const LOGIN_TIMEOUT = 20_000;
 /** 开启自动化后项目窗口要过一会儿才登记好，之前取 ticket 会报找不到窗口（开发者工具自己的命令行开启后等 8s 再用） */
 const WINDOW_TIMEOUT = 10_000;
 const WINDOW_RETRY_INTERVAL = 500;
 
+/** 借开发者工具登录态的两条路：要 ticket，或者让它的模拟器自己调 */
+export interface DevtoolsSession {
+  /** 取开发者 ticket。每次调用都重新取，开发者工具重新登录、刷新 ticket 后不用重启 */
+  findTicket: TicketSource;
+  /** 让模拟器自己调 wx.login 取 code，不要 ticket。旧版开发者工具没有自动化接口，这条路是 null */
+  loginCode: (() => Promise<string>) | null;
+}
+
 /**
  * @param projectPath 项目目录（project.config.json 所在目录），开发者工具为它开启自动化接口，项目窗口没开时会打开
  * @param logger 开启自动化接口时告诉用户，因为开发者工具里可能多出一个项目窗口
- * @returns 每次调用都重新取，开发者工具重新登录、刷新 ticket 后不用重启。取不到时抛错，消息是给用户看的原因和处理办法
+ * @returns 取不到时抛错，消息是给用户看的原因和处理办法
  */
-export function developerTicketSource(projectPath: string, logger: Pick<Console, 'log'>): TicketSource {
+export function devtoolsSession(projectPath: string, logger: Pick<Console, 'log'>): DevtoolsSession {
   const cli = findElectronDevtoolsCli();
-  if (!cli) return async () => findDeveloperTicket();
+  if (!cli) return { findTicket: async () => findDeveloperTicket(), loginCode: null };
 
   let automatorPort: Promise<number> | null = null;
   // 同时发起的几次请求共用一次开启；失败了下次请求再试，用户改好设置后不用重启
@@ -54,17 +67,35 @@ export function developerTicketSource(projectPath: string, logger: Pick<Console,
     return automatorPort;
   };
 
-  return async () => {
-    if (process.env[TICKET_ENV]) return { newticket: process.env[TICKET_ENV] };
-
+  /** 开发者工具重启过、项目窗口被关掉时，重新开启一次自动化接口再试 */
+  const withRestart = async <T>(run: (port: number) => Promise<T>): Promise<T> => {
     const port = startOnce();
     try {
-      return await requestTicketOnceWindowReady(await port, projectPath);
+      return await run(await port);
     } catch (error) {
       if (!(error instanceof AutomatorGone)) throw error;
-      // 开发者工具重启过、项目窗口被关掉：重新开启一次再试
       if (automatorPort === port) automatorPort = null;
-      return requestTicketOnceWindowReady(await startOnce(), projectPath);
+      return run(await startOnce());
+    }
+  };
+
+  // 退回模拟器取 code 是静默的，不说一声用户会奇怪为什么 wx.login 行、手机号不行
+  let loginCodeNoticed = false;
+  return {
+    findTicket: async () => {
+      if (process.env[TICKET_ENV]) return { newticket: process.env[TICKET_ENV] };
+      return withRestart(port => onceWindowReady(() => requestTicket(port), projectPath));
+    },
+    loginCode: async () => {
+      const code = await withRestart(port => onceWindowReady(() => requestLoginCode(port), projectPath));
+      if (!loginCodeNoticed) {
+        loginCodeNoticed = true;
+        logger.log(
+          '[wxa-runner] --devtools-login：微信后台不给这个 appid 取登录票据，wx.login 的 code 改由开发者工具的模拟器获取；' +
+            '手机号、服务市场和插件没有这条路，调用时会失败'
+        );
+      }
+      return code;
     }
   };
 }
@@ -73,11 +104,23 @@ export function developerTicketSource(projectPath: string, logger: Pick<Console,
 class AutomatorGone extends Error {}
 class WindowNotFound extends Error {}
 
-async function requestTicketOnceWindowReady(port: number, projectPath: string): Promise<DeveloperTicket> {
+/**
+ * 微信后台不给这个 appid 取票据，本机设置改不出来
+ *
+ * 不是用户配错了，别的办法也绕不过去，所以单独一类：wx.login 可以退回让模拟器自己调
+ */
+export class TicketNotAllowed extends Error {}
+
+/**
+ * 开启自动化接口后项目窗口还要过一会儿才登记好，这之前取 ticket 和让模拟器调 wx.login 都报找不到窗口，等它就绪
+ *
+ * @throws 等过 WINDOW_TIMEOUT 还没就绪时，换成中文的处理办法；别的错误原样抛出
+ */
+async function onceWindowReady<T>(run: () => Promise<T>, projectPath: string): Promise<T> {
   const deadline = Date.now() + WINDOW_TIMEOUT;
   for (;;) {
     try {
-      return await requestTicket(port);
+      return await run();
     } catch (error) {
       if (!(error instanceof WindowNotFound)) throw error;
       if (Date.now() >= deadline) throw new Error(`微信开发者工具里找不到项目窗口，请在微信开发者工具里打开项目 ${projectPath}`);
@@ -142,11 +185,11 @@ function cliErrorMessage(stdout: string): string {
 }
 
 /**
- * 通过自动化协议取开发者工具当前的 ticket：一条 WebSocket，{ id, method, params } → { id, result | error }
+ * 发一条自动化协议命令：一条 WebSocket，{ id, method, params } → { id, result | error }
  *
  * 开发者工具会把别的自动化会话的消息也广播给每个连接，自己的回包还会收到两遍，按 id 认第一条
  */
-function requestTicket(port: number): Promise<DeveloperTicket> {
+function sendCommand(port: number, method: string, params: object, timeout: number): Promise<Record<string, any>> {
   return new Promise((resolve, reject) => {
     const id = `wxa-runner-${randomUUID()}`;
     const socket = new WebSocket(`ws://127.0.0.1:${port}`);
@@ -156,17 +199,14 @@ function requestTicket(port: number): Promise<DeveloperTicket> {
       finish();
     };
     const timer = setTimeout(
-      () =>
-        settle(() =>
-          reject(new AutomatorGone(`微信开发者工具的自动化接口 ${AUTOMATOR_TIMEOUT / 1000}s 内没有响应，请确认开发者工具里打开了项目窗口`))
-        ),
-      AUTOMATOR_TIMEOUT
+      () => settle(() => reject(new AutomatorGone(`微信开发者工具的自动化接口 ${timeout / 1000}s 内没有响应，请确认开发者工具里打开了项目窗口`))),
+      timeout
     );
     const gone = () => settle(() => reject(new AutomatorGone(`连不上微信开发者工具的自动化接口（端口 ${port}），请确认开发者工具在运行`)));
 
     socket.on('error', gone);
     socket.on('close', gone);
-    socket.on('open', () => socket.send(JSON.stringify({ id, method: 'Tool.getTicket', params: {} })));
+    socket.on('open', () => socket.send(JSON.stringify({ id, method, params })));
     socket.on('message', data => {
       let message;
       try {
@@ -176,17 +216,48 @@ function requestTicket(port: number): Promise<DeveloperTicket> {
       }
       if (message?.id !== id) return;
       if (message.error) settle(() => reject(explainAutomatorError(String(message.error.message))));
-      else if (typeof message.result?.ticket !== 'string') settle(() => reject(new Error('微信开发者工具没有返回登录票据')));
-      else settle(() => resolve({ newticket: message.result.ticket, expiredAt: message.result.expiredTime }));
+      else settle(() => resolve(message.result ?? {}));
     });
   });
+}
+
+/** 通过自动化协议取开发者工具当前的 ticket */
+async function requestTicket(port: number): Promise<DeveloperTicket> {
+  const result = await sendCommand(port, 'Tool.getTicket', {}, AUTOMATOR_TIMEOUT);
+  if (typeof result.ticket !== 'string') throw new Error('微信开发者工具没有返回登录票据');
+  return { newticket: result.ticket, expiredAt: result.expiredTime };
+}
+
+/**
+ * 让开发者工具的模拟器自己调 wx.login，取真实的 code
+ *
+ * App.callWxMethod 不查 Tool.getTicket 那道白名单，所以 appid 取不到票据时这条路还通。
+ * code 由模拟器向微信换取，实测能用 appsecret 换到 session_key。
+ * 在开发者工具里 mock 过 wx.login 时，这里拿到的是 mock 值
+ */
+async function requestLoginCode(port: number): Promise<string> {
+  const result = await sendCommand(port, 'App.callWxMethod', { method: 'login', args: [{}] }, LOGIN_TIMEOUT);
+  const { code, errMsg } = result.result ?? {};
+  if (typeof code !== 'string' || !code) {
+    throw new Error(`微信开发者工具的模拟器没有返回 code${errMsg ? `：${errMsg}` : ''}`);
+  }
+  return code;
 }
 
 /** 开发者工具给的是英文，换成处理办法 */
 function explainAutomatorError(message: string): Error {
   if (message.includes('GUI project window is not found')) return new WindowNotFound(message);
-  if (message.includes('not allow to get')) {
+  // 开发者工具先查后台下发的白名单，再查本机设置，两步失败的提示只差后半句
+  if (message.includes('navigate to security settings')) {
     return new Error('微信开发者工具不允许获取登录票据，请在开发者工具「设置 → 安全设置」里打开「允许获取工具登录票据」');
+  }
+  if (message.includes('not allow to get')) {
+    return new TicketNotAllowed(
+      '微信开发者工具不给这个 appid 取登录票据：是否允许由微信后台下发，这个 appid 没有开，' +
+        '「设置 → 安全设置」里也就不显示「允许获取工具登录票据」，本机改不了。' +
+        'wx.login 会自动改由开发者工具的模拟器获取；手机号和服务市场请去掉 --devtools-login，' +
+        `用 setup 的 mock 造数据，或另取一张票据用环境变量 ${TICKET_ENV} 传进来`
+    );
   }
   if (message.includes('need to login')) return new Error('微信开发者工具未登录，请先在开发者工具里登录');
   return new Error(`微信开发者工具返回错误：${message}`);
