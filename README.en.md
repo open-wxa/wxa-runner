@@ -132,6 +132,21 @@ CI covers only the bundled 3.7.0; the other versions are checked locally with `W
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) (in Chinese) for building from source, running the examples and testing. Issues and PRs are welcome.
 
+## Support
+
+If this project helps you, you can buy the author a coffee ☕️
+
+<img src="./docs/public/wechat-pay.jpg" width="240" alt="WeChat Pay QR code">
+
+## Star History
+
+<a href="https://star-history.com/#open-wxa/wxa-runner&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=open-wxa/wxa-runner&type=Date&theme=dark">
+    <img src="https://api.star-history.com/svg?repos=open-wxa/wxa-runner&type=Date" alt="Star History Chart">
+  </picture>
+</a>
+
 ## Acknowledgements
 
 - The WeChat team, for the official base library and compilers

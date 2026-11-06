@@ -42,6 +42,21 @@ npx wxa-runner dev ./dist/dev/mp-weixin   # 原生小程序目录，或 uni-app 
 
 从源码构建、运行示例和测试见 [CONTRIBUTING.md](./CONTRIBUTING.md)。欢迎提交 Issue 和 PR。
 
+## 赞赏
+
+如果这个项目对你有帮助，可以请作者喝杯咖啡 ☕️
+
+<img src="./docs/public/wechat-pay.jpg" width="240" alt="微信赞赏码">
+
+## Star History
+
+<a href="https://star-history.com/#open-wxa/wxa-runner&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=open-wxa/wxa-runner&type=Date&theme=dark">
+    <img src="https://api.star-history.com/svg?repos=open-wxa/wxa-runner&type=Date" alt="Star History Chart">
+  </picture>
+</a>
+
 ## 致谢
 
 - 微信团队：官方基础库与编译器
