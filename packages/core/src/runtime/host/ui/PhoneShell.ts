@@ -168,6 +168,7 @@ export class PhoneShell {
     this.pages = root.querySelector('.wxa-pages')!;
     this.tabBar = root.querySelector('.wxa-tabbar')!;
     this.overlay = root.querySelector('.wxa-overlay')!;
+    guardOverlayTouchClicks(this.overlay);
     this.routeLabel = root.querySelector('.wxa-route')!;
     root.querySelector('.wxa-reload')!.addEventListener('click', () => location.reload());
 
@@ -497,6 +498,28 @@ function definedOnly<T extends object>(value: T): Partial<T> {
 
 function maskElement(dim: boolean): HTMLElement {
   return element('div', 'wxa-mask' + (dim ? ' is-dim' : ''));
+}
+
+// 基础库可在 iframe 的 touchend 中打开弹层，随后浏览器会把同一次触摸的 click 派给新弹层。
+function guardOverlayTouchClicks(overlay: HTMLElement) {
+  let press: { id: number; target: Node } | undefined;
+  overlay.addEventListener('pointerdown', event => {
+    press = event.pointerType === 'touch' && event.target instanceof Node
+      ? { id: event.pointerId, target: event.target }
+      : undefined;
+  }, true);
+  overlay.addEventListener('pointercancel', event => {
+    if (press?.id === event.pointerId) press = undefined;
+  }, true);
+  overlay.addEventListener('click', event => {
+    if (event.pointerType !== 'touch') return;
+    if (press?.id === event.pointerId) {
+      const start = press;
+      press = undefined;
+      if (event.target instanceof Node && event.target.contains(start.target)) return;
+    }
+    event.stopPropagation();
+  }, true);
 }
 
 const BACK_ICON = '<svg width="12" height="20" viewBox="0 0 12 20"><path d="M10 2 2 10l8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
