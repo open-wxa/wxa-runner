@@ -34,6 +34,7 @@ wxa-runner dev <项目目录> [选项]
 | `--no-forward-console` | | 报错不转发到终端 |
 | `--devtools-login` | | 借本机开发者工具的登录态访问微信后台：真实的 `wx.login` code 和手机号、服务市场 `wx.serviceMarket`、插件，见[借用开发者工具登录态](./devtools-login.md) |
 | `--webview-window` | | web-view 的网页在新窗口打开，不再嵌在模拟器里。网页和模拟器（localhost）不是同一个站点时，网页的 Cookie 也能正常使用，见 [web-view 的 Cookie](./features.md#web-view-的-cookie) |
+| `--page-transition` | 关闭 | 实验性：目前只有页面内容滑动，导航栏和 tabBar 不跟随，在路由切换时直接换成新页面的样子。`wx.navigateTo` 时新页从右侧滑入，`wx.navigateBack` 时退出页向右滑出。实际播放动画时，`success` 会在约 300 ms 的转场结束、页面恢复交互后触发。尊重浏览器的「减少动态效果」设置 |
 | `--extension <模块>` | | 加载开发服务器扩展，npm 包名或文件路径，可以写多次。从项目目录、当前目录依次查找，扩展提供的页面打印在启动信息里，`--open` 时打开第一个。如元素检查器：`--extension @open-wxa/wxa-inspector`（先 `npm i -D @open-wxa/wxa-inspector`） |
 
 常见用法：

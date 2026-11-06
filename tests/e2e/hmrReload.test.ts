@@ -21,9 +21,25 @@ describe.skipIf(!e2eReady)('热更新：退回整页刷新', () => {
     await app.page.evaluate(() => window.__wxa_test_api__.navigateTo('/pages/vue/vue'));
     await waitForPage('pages/vue/vue');
 
+    // 刷新后的宿主启用转场，页面栈恢复仍应直接完成。
+    await app.page.route('**/__wxa__/app-info.json', async route => {
+      const response = await route.fetch();
+      await route.fulfill({ response, json: { ...await response.json(), pageTransition: true } });
+    });
+    await app.page.addInitScript(() => {
+      (window as any).__pageTransitionCount = 0;
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (keyframes, options) {
+        if (this instanceof HTMLIFrameElement && this.parentElement?.classList.contains('wxa-pages')) {
+          (window as any).__pageTransitionCount++;
+        }
+        return animate.call(this, keyframes, options);
+      };
+    });
     edit('app.js', js => js.replace('loads: 0', 'loads: 100'));
 
     await waitForReload();
+    expect(await app.page.evaluate(() => (window as any).__pageTransitionCount)).toBe(0);
     expect(await stack()).toEqual([
       { path: 'pages/index/index', query: {} },
       { path: 'pages/detail/detail', query: { id: '7' } },

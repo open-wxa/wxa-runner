@@ -31,6 +31,7 @@ import { PageStack } from './PageStack';
 import { PageView } from './PageView';
 import { cloneInto, cloneNativeInto } from './realm';
 import { chooseFiles, hasUserActivation } from './ui/fileChooser';
+import { canAnimatePageTransition } from './ui/pageTransition';
 import { NavigationState, PhoneShell } from './ui/PhoneShell';
 
 export type OpenType = 'appLaunch' | 'navigateTo' | 'navigateBack' | 'redirectTo' | 'reLaunch' | 'switchTab';
@@ -360,22 +361,38 @@ export class Host implements HostApi {
     this.activate(page, 'appLaunch');
   }
 
-  async navigateTo(url: string): Promise<ApiResult> {
+  async navigateTo(url: string, { animate = true } = {}): Promise<ApiResult> {
     if (!this.stack.canPush()) return fail('navigateTo', 'webview count limit exceed');
     const { path, query } = this.resolveUrl(url);
     if (this.tabPaths.has(path)) return fail('navigateTo', 'can not navigateTo a tabbar page');
     if (!this.hasPage(path)) return fail('navigateTo', `page "${path}" is not found`);
 
     const page = await this.openPage(path, query);
+    const previous = this.currentPage();
     this.stack.push(page);
     this.activate(page, 'navigateTo');
+    if (animate && this.info.pageTransition && previous && canAnimatePageTransition(previous.frame)) {
+      await this.shell.transitionPages(previous.frame, page.frame, 'push');
+    }
     return ok('navigateTo', { webviewId: page.id });
   }
 
   async navigateBack(delta: number): Promise<ApiResult> {
     if (this.stack.size <= 1) return fail('navigateBack', 'cannot navigate back at first page.');
-    this.stack.pop(delta).forEach(page => this.closePage(page));
-    this.activate(this.currentPage()!, 'navigateBack');
+    const popped = this.stack.pop(delta);
+    const outgoing = popped[0];
+    const animate = this.info.pageTransition && outgoing && canAnimatePageTransition(outgoing.frame);
+    // 多级返回只让原栈顶参与动画，中间页可以立即销毁。
+    for (const page of popped) {
+      if (!animate || page !== outgoing) this.closePage(page);
+    }
+    const target = this.currentPage()!;
+    try {
+      this.activate(target, 'navigateBack');
+      if (animate) await this.shell.transitionPages(outgoing.frame, target.frame, 'pop');
+    } finally {
+      if (animate) this.closePage(outgoing);
+    }
     return ok('navigateBack');
   }
 

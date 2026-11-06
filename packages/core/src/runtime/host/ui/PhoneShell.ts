@@ -6,6 +6,7 @@ import type { DeviceProfile } from '../../types';
 import { menuButtonRect, NAVIGATION_BAR_HEIGHT, TAB_BAR_HEIGHT } from '../api/system';
 import { element } from './dom';
 import { openImagePreview } from './ImagePreview';
+import { animatePageTransition } from './pageTransition';
 import { openPicker, PickerOptions, PickerSession } from './Picker';
 import { DEVICE_BEZEL, SHELL_CSS, STAGE_GAP, STAGE_PADDING } from './styles';
 import { TabBarItemView, tabBarView } from './tabBarView';
@@ -210,6 +211,19 @@ export class PhoneShell {
 
   onBack(handler: () => void) {
     this.backButton.addEventListener('click', handler);
+  }
+
+  async transitionPages(previous: HTMLIFrameElement, current: HTMLIFrameElement, direction: 'push' | 'pop') {
+    const navWasInert = this.navBar.inert;
+    const tabsWereInert = this.tabBar.inert;
+    this.navBar.inert = true;
+    this.tabBar.inert = true;
+    try {
+      await animatePageTransition(previous, current, direction);
+    } finally {
+      this.navBar.inert = navWasInert;
+      this.tabBar.inert = tabsWereInert;
+    }
   }
 
   setTabBar(config: TabBarConfig | undefined, onTap: (pagePath: string, index: number) => void) {
