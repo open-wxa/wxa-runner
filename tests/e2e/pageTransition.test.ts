@@ -2,11 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { e2eReady, expectText, Runner, startRunner } from './runner';
 
 const project = {
-  'app.json': { pages: ['pages/index/index', 'pages/detail/detail'] },
+  'app.json': { pages: ['pages/index/index', 'pages/detail/detail', 'pages/input/input'] },
   'pages/index/index.js': 'Page({ open() { wx.navigateTo({ url: "/pages/detail/detail" }); } });',
   'pages/index/index.wxml': '<button id="open" bindtap="open">Open detail</button>',
   'pages/detail/detail.js': 'Page({ data: { count: 0 }, increment() { this.setData({ count: this.data.count + 1 }); } });',
-  'pages/detail/detail.wxml': '<button id="increment" bindtap="increment">Increment</button><view id="count">{{count}}</view>'
+  'pages/detail/detail.wxml': '<button id="increment" bindtap="increment">Increment</button><view id="count">{{count}}</view>',
+  'pages/input/input.js': 'Page({ data: { autoFocus: true, value: "" }, update(event) { this.setData({ value: event.detail.value }); } });',
+  'pages/input/input.wxml': '<input focus="{{autoFocus}}" bindinput="update"/><view id="value">{{value}}</view>'
 };
 
 describe.skipIf(!e2eReady)('页面滑动过渡', () => {
@@ -45,12 +47,15 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
         if (this instanceof HTMLIFrameElement && this.parentElement === viewport) {
           const frames = Array.from(viewport.querySelectorAll('iframe'));
           const visible = frames.filter(frame => frame.style.visibility === 'visible');
+          const outgoing = visible.find(frame => !frame.hasAttribute('data-current'))!;
+          const incoming = visible.find(frame => frame.hasAttribute('data-current'))!;
           records.push({
             path: this.dataset.path,
             current: this.hasAttribute('data-current'),
             frames: frames.length,
             visible: visible.length,
-            inert: visible.every(frame => frame.contentDocument!.documentElement.inert),
+            outgoingInert: outgoing.contentDocument!.documentElement.inert,
+            incomingPointerEvents: getComputedStyle(incoming.contentDocument!.documentElement).pointerEvents,
             navigationLocked: navbar.inert && tabBar.inert
           });
         }
@@ -63,7 +68,8 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
           records,
           remaining: viewport.querySelectorAll('iframe').length,
           restored: home.hasAttribute('data-current'),
-          inert: home.contentDocument!.documentElement.inert,
+          homeInteractive: !home.contentDocument!.documentElement.inert &&
+            getComputedStyle(home.contentDocument!.documentElement).pointerEvents !== 'none',
           navigationUnlocked: !navbar.inert && !tabBar.inert
         };
       } finally {
@@ -73,18 +79,18 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
 
     expect(await navigate()).toEqual({
       records: [
-        { path: 'pages/detail/detail', current: true, frames: 2, visible: 2, inert: true, navigationLocked: true },
-        { path: 'pages/detail/detail', current: true, frames: 3, visible: 2, inert: true, navigationLocked: true },
-        { path: 'pages/detail/detail', current: false, frames: 2, visible: 2, inert: true, navigationLocked: true }
+        { path: 'pages/detail/detail', current: true, frames: 2, visible: 2, outgoingInert: true, incomingPointerEvents: 'none', navigationLocked: true },
+        { path: 'pages/detail/detail', current: true, frames: 3, visible: 2, outgoingInert: true, incomingPointerEvents: 'none', navigationLocked: true },
+        { path: 'pages/detail/detail', current: false, frames: 2, visible: 2, outgoingInert: true, incomingPointerEvents: 'none', navigationLocked: true }
       ],
       remaining: 1,
       restored: true,
-      inert: false,
+      homeInteractive: true,
       navigationUnlocked: true
     });
 
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    expect(await navigate()).toEqual({ records: [], remaining: 1, restored: true, inert: false, navigationUnlocked: true });
+    expect(await navigate()).toEqual({ records: [], remaining: 1, restored: true, homeInteractive: true, navigationUnlocked: true });
   });
 
   it('连点返回按钮只退出一页，转场后仍能再次返回', async () => {
@@ -106,5 +112,31 @@ describe.skipIf(!e2eReady)('页面滑动过渡', () => {
 
     await back.click();
     await page.waitForFunction(() => window.__wxa_test_api__.pageStack().length === 1);
+  });
+
+  it('转场时页面可以自动聚焦，结束后能直接打字', async () => {
+    const { page } = runner;
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await runner.open('/');
+    await page.evaluate(async () => {
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (keyframes, options) {
+        const animation = animate.call(this, keyframes, options);
+        // 路由完成与动画默认时长相近，减速让基础库的自动聚焦明确落在转场内。
+        if (this instanceof HTMLIFrameElement && this.dataset.path === 'pages/input/input') {
+          animation.updatePlaybackRate(0.5);
+        }
+        return animation;
+      };
+      try {
+        await window.__wxa_test_api__.navigateTo('/pages/input/input');
+      } finally {
+        Element.prototype.animate = animate;
+      }
+    });
+    await page.frameLocator('iframe[data-current]').locator('input:focus').waitFor({ timeout: 3000 });
+    await page.keyboard.type('hello');
+    const { frameName } = (await page.evaluate(() => window.__wxa_test_api__.currentPage()))!;
+    await expectText(page.frame({ name: frameName })!, '#value', 'hello');
   });
 });
