@@ -1,5 +1,5 @@
 ---
-description: wxa-runner 命令行：dev 启动开发服务器的选项（端口、局域网访问、基础库版本、setup、报错转发到终端、借用开发者工具登录态），baselib 管理基础库，viewer 打包和部署查看器，以及 WXA_BASELIB 等环境变量。
+description: wxa-runner 命令行：dev 启动开发服务器的选项（端口、局域网访问、基础库版本、setup、报错转发到终端、借用开发者工具登录态）和配置文件 wxa.config.ts，baselib 管理基础库，viewer 打包和部署查看器，以及 WXA_BASELIB 等环境变量。
 ---
 
 # 命令与环境变量
@@ -16,13 +16,14 @@ description: wxa-runner 命令行：dev 启动开发服务器的选项（端口�
 ## wxa-runner dev
 
 ```bash
-wxa-runner dev <项目目录> [选项]
+wxa-runner dev [项目目录] [选项]
 ```
 
-`<项目目录>` 是小程序目录：原生项目的 `project.config.json` 所在目录，或 uni-app、Taro 等框架编译出的 `mp-weixin` 目录。
+`[项目目录]` 是小程序目录：原生项目的 `project.config.json` 所在目录，或 uni-app、Taro 等框架编译出的 `mp-weixin` 目录。[配置文件](#配置文件)里写了 `project` 时可以不写。
 
 | 选项 | 默认值 | 作用 |
 | --- | --- | --- |
+| `-c, --config <文件>` | 自动查找 | [配置文件](#配置文件)，路径相对当前目录。不指定时使用当前目录下的 `wxa.config.ts` / `.mts` / `.js` / `.mjs` / `.cjs` |
 | `-p, --port <端口>` | `3000` | 端口号。默认端口被占用时自动换用后面的端口 |
 | `--host [地址]` | `localhost` | 监听地址。只写 `--host` 时开放局域网访问 |
 | `-b, --baselib <版本>` | 最新的兼容版本 | 基础库版本，见 [wxa-runner baselib](#wxa-runner-baselib) |
@@ -33,8 +34,6 @@ wxa-runner dev <项目目录> [选项]
 | `--forward-console` | 检测到编程助手时开启 | `console.warn` / `console.error` 也转发到终端，见[报错转发到终端](#报错转发到终端) |
 | `--no-forward-console` | | 报错不转发到终端 |
 | `--devtools-login` | | 借本机开发者工具的登录态访问微信后台：真实的 `wx.login` code 和手机号、服务市场 `wx.serviceMarket`、插件，见[借用开发者工具登录态](./devtools-login.md) |
-| `--webview-window` | | web-view 的网页在新窗口打开，不再嵌在模拟器里。网页和模拟器（localhost）不是同一个站点时，网页的 Cookie 也能正常使用，见 [web-view 的 Cookie](./features.md#web-view-的-cookie) |
-| `--page-transition` | 关闭 | 实验性：目前只有页面内容滑动，导航栏和 tabBar 不跟随，在路由切换时直接换成新页面的样子。`wx.navigateTo` 时新页从右侧滑入，`wx.navigateBack` 时退出页向右滑出。实际播放动画时，`success` 会在约 300 ms 的转场结束、页面恢复交互后触发。尊重浏览器的「减少动态效果」设置 |
 | `--extension <模块>` | | 加载开发服务器扩展，npm 包名或文件路径，可以写多次。从项目目录、当前目录依次查找，扩展提供的页面打印在启动信息里，`--open` 时打开第一个。如元素检查器：`--extension @open-wxa/wxa-inspector`（先 `npm i -D @open-wxa/wxa-inspector`） |
 
 常见用法：
@@ -55,6 +54,51 @@ wxa-runner dev . --no-watch --port 3000
 # 开放局域网访问
 wxa-runner dev . --host
 ```
+
+### 配置文件
+
+项目里长期不变的参数写在当前目录的 `wxa.config.ts`（也可以是 `.mts` / `.js` / `.mjs` / `.cjs`）里，默认导出一个普通对象，不用引入 wxa-runner：
+
+```ts
+// wxa.config.ts
+export default {
+  project: './dist/dev/mp-weixin',
+  setup: './wxa.setup.ts',
+  port: 3000,
+  devtoolsLogin: true,
+  webViewWindow: true,
+  extensions: ['@open-wxa/wxa-inspector']
+};
+```
+
+写了之后只要 `wxa-runner dev`。命令行写了的同名参数优先，如 `wxa-runner dev --port 4000`。路径都相对配置文件所在目录，用 `-c` 指定其他位置的配置文件。
+
+| 配置项 | 对应的命令行参数 | 作用 |
+| --- | --- | --- |
+| `project` | `[项目目录]` | 小程序目录 |
+| `port` | `--port` | 端口号 |
+| `host` | `--host` | 监听地址，`true` 时开放局域网访问 |
+| `open` | `--open` | 启动后打开浏览器 |
+| `baselib` | `--baselib` | 基础库版本 |
+| `watch` | `--no-watch` | `false` 时不监听文件变化 |
+| `setup` | `--setup` / `--no-setup` | setup 文件，`false` 时不执行 |
+| `devtoolsLogin` | `--devtools-login` | [借用开发者工具登录态](./devtools-login.md) |
+| `forwardConsole` | `--forward-console` / `--no-forward-console` | `true` 时 `console.warn` / `console.error` 也转发到终端，`false` 时报错也不转发 |
+| `extensions` | `--extension` | 开发服务器扩展：npm 包名、文件路径，或 import 进来的扩展（扩展对象，或不带参数调用后返回扩展的函数）。排在命令行的 `--extension` 之前 |
+| `webViewWindow` | 无 | web-view 的网页在新窗口打开，不再嵌在模拟器里。网页和模拟器（localhost）不是同一个站点时，网页的 Cookie 也能正常使用，见 [web-view 的 Cookie](./features.md#web-view-的-cookie)。命令行的 `--webview-window` 下个版本移除 |
+| `pageTransition` | 无 | 实验性：`wx.navigateTo` 时新页从右侧滑入，`wx.navigateBack` 时退出页向右滑出。目前只有页面内容滑动，导航栏和 tabBar 不跟随，在路由切换时直接换成新页面的样子。实际播放动画时，`success` 会在约 300 ms 的转场结束、页面恢复交互后触发。尊重浏览器的「减少动态效果」设置 |
+
+要类型提示时加上只有类型的引用，运行时不会加载 wxa-runner，用 npx 运行时也能用：
+
+```ts
+import type { WxaConfig } from 'wxa-runner';
+
+export default {
+  port: 3000
+} satisfies WxaConfig;
+```
+
+Playwright 不读配置文件，开发服务器的参数写在 `playwright.config.ts` 的 `wxaServerOptions` 里，见[测试](./testing.md)。
 
 地址带上 `?path=` 直接打开指定页面，其余参数作为页面参数：`http://localhost:3000/?path=pages/detail/detail&id=1`。
 

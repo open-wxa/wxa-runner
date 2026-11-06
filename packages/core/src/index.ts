@@ -6,6 +6,8 @@
 
 export { DevServer, DEFAULT_DEVICE, findRuntimeDir, listen, LOCAL_HOST_OF_ANY_ADDRESS } from './server/DevServer';
 export { bundleSetup, findSetupFile } from './server/setup';
+export { findConfigFile, loadConfigFile, CONFIG_FILE_NAMES } from './server/config';
+export type { WxaConfig } from './server/config';
 export { handleProxy } from './server/proxy';
 export type { DevServerMiddleware, DevServerOptions, WebviewScript } from './server/DevServer';
 export type { DevServerExtension, ExtensionContext, ExtensionEntry, ExtensionSetup } from './server/extensions';

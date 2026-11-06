@@ -20,44 +20,58 @@ program
   .version(require('../package.json').version);
 
 program
-  .command('dev <project-path>')
-  .description('启动开发服务器')
+  .command('dev [project-path]')
+  .description('启动开发服务器（项目目录也可以写在配置文件 wxa.config.ts / .js 里）')
+  .option('-c, --config <file>', '配置文件（默认使用当前目录下的 wxa.config.ts / .mts / .js / .mjs / .cjs），命令行参数优先')
   .option('-p, --port <port>', '端口号（默认 3000，被占用时换用后面空闲的端口）')
   .option('--host [host]', '监听地址，不带值时监听所有地址，局域网也能访问', 'localhost')
   .option('-b, --baselib <version>', '基础库版本（默认使用本机已安装的最新兼容版本）')
   .option('--setup <file>', '小程序启动前执行的 setup 文件（默认使用项目目录下的 wxa.setup.ts / .js / .mjs）')
   .option('--no-setup', '不执行 setup 文件')
   .option('--no-watch', '不监听文件变化')
-  .option('--page-transition', '（实验性）在 navigateTo 和 navigateBack 时播放页面滑动过渡，导航栏和 tabBar 暂不跟随')
   .option('-o, --open', '启动后打开浏览器')
   .option('--forward-console', '浏览器里的 console.warn / console.error 也转发到终端（检测到编程助手时默认开启）')
   .option('--no-forward-console', '浏览器里的报错不转发到终端')
   .option('--devtools-login', '借本机微信开发者工具的登录态访问微信后台：真实的 code 和手机号、服务市场、插件')
-  .option('--webview-window', 'web-view 的网页在新窗口打开：网页和模拟器域名不同时，Cookie 也能正常使用')
   .option('--extension <module>', '加载开发服务器扩展（npm 包名或文件路径），可以写多次', (value, previous) => [...previous, value], [])
-  // 旧名，开发服务器会提示改用 --devtools-login
-  .addOption(new Option('--real-login').hideHelp())
-  .action(async (projectPath, options) => {
-    const { DevServer } = require('@open-wxa/wxa-runner-core');
-    const resolvedProjectPath = path.resolve(process.cwd(), projectPath);
+  // 改在配置文件里写 webViewWindow，下个版本移除
+  .addOption(new Option('--webview-window').hideHelp())
+  .action(async (projectPath, options, command) => {
+    const { DevServer, findConfigFile, loadConfigFile } = require('@open-wxa/wxa-runner-core');
 
     try {
+      const configFile = options.config ? path.resolve(options.config) : findConfigFile(process.cwd());
+      if (options.config && !require('fs').existsSync(configFile)) throw new Error(`找不到配置文件：${configFile}`);
+      const config = configFile ? await loadConfigFile(configFile, message => console.warn(chalk.yellow(message))) : {};
+      // 命令行写了的参数优先，其次是配置文件，最后是命令行的默认值
+      const option = key => (command.getOptionValueSource(key) === 'cli' ? options[key] : config[key] ?? options[key]);
+
+      const resolvedProjectPath = projectPath ? path.resolve(projectPath) : config.project;
+      if (!resolvedProjectPath) throw new Error('缺少项目目录：写在命令行，如 wxa-runner dev .，或在配置文件 wxa.config.ts 里写 project');
+      if (options.webviewWindow) console.warn(chalk.yellow('--webview-window 下个版本移除，请改在配置文件 wxa.config.ts 里写 webViewWindow: true'));
+
       const extensions = [];
+      for (const [i, extension] of (config.extensions ?? []).entries()) {
+        extensions.push(typeof extension === 'string'
+          ? await loadExtension(extension, resolvedProjectPath, path.dirname(configFile))
+          : checkExtension(typeof extension === 'function' ? extension() : extension, `配置文件 extensions 的第 ${i + 1} 项`));
+      }
       for (const name of options.extension) extensions.push(await loadExtension(name, resolvedProjectPath));
-      const forward = await resolveForwardConsole(options.forwardConsole);
+      const forward = await resolveForwardConsole(option('forwardConsole'));
+      const port = option('port');
+      const host = option('host');
       const server = new DevServer({
         projectPath: resolvedProjectPath,
         extensions,
-        port: options.port === undefined ? undefined : parseInt(options.port, 10),
-        host: options.host === true ? '0.0.0.0' : options.host,
-        baseLibVersion: options.baselib,
-        setup: options.setup,
-        watch: options.watch,
-        pageTransition: options.pageTransition,
-        devtoolsLogin: options.devtoolsLogin,
-        realLogin: options.realLogin,
+        port: port === undefined ? undefined : parseInt(port, 10),
+        host: host === true ? '0.0.0.0' : host,
+        baseLibVersion: option('baselib'),
+        setup: option('setup'),
+        watch: option('watch'),
+        pageTransition: config.pageTransition,
+        devtoolsLogin: option('devtoolsLogin'),
         forwardConsole: forward.mode,
-        webViewWindow: options.webviewWindow
+        webViewWindow: options.webviewWindow || config.webViewWindow
       });
       const url = await server.start();
 
@@ -71,13 +85,14 @@ program
       }
       networkUrls.forEach((networkUrl, i) => console.log(`  ${i === 0 ? '局域网' : '      '}    ${chalk.cyan(networkUrl)}`));
       console.log(`  控制台    ${describeForwardConsole(forward)}`);
+      if (configFile) console.log(`  配置      ${configFile}`);
       console.log(`  项目      ${server.project.root}`);
       console.log(`  基础库    ${server.baseLib.version}${server.baseLib.source === 'bundled' ? '（内置）' : ''}`);
       if (server.setupFile) console.log(`  setup     ${server.setupFile}`);
       console.log('');
 
       // 有扩展页面时打开第一个：扩展页面通常把小程序嵌在里面
-      if (options.open) openBrowser(url + (server.extensionEntries[0]?.path ?? ''));
+      if (option('open')) openBrowser(url + (server.extensionEntries[0]?.path ?? ''));
 
       const shutdown = () => server.close().then(() => process.exit(0));
       process.on('SIGINT', shutdown);
@@ -237,16 +252,18 @@ baselib
   });
 
 /**
- * 加载 --extension 指定的扩展。扩展装在用户项目里，从 wxa-runner 自己的安装位置不一定找得到（如 pnpm 不提升依赖时），
- * 所以依次从项目目录、当前目录、wxa-runner 自身查找。CommonJS 和 ES 模块都可以，
+ * 加载 --extension 或配置文件 extensions 里写的扩展。扩展装在用户项目里，从 wxa-runner 自己的安装位置不一定找得到（如 pnpm 不提升依赖时），
+ * 所以依次从配置文件所在目录、项目目录、当前目录、wxa-runner 自身查找。CommonJS 和 ES 模块都可以，
  * 默认导出可以是扩展对象，也可以是不带参数调用后返回扩展的函数
+ * @param configDir 扩展写在配置文件里时，配置文件所在目录
  */
-async function loadExtension(name, projectPath) {
+async function loadExtension(name, projectPath, configDir) {
   const { createRequire } = require('module');
   const { pathToFileURL } = require('url');
   const request = name.startsWith('.') ? path.resolve(name) : name;
   let resolved = null;
-  for (const base of [path.join(projectPath, 'package.json'), path.join(process.cwd(), 'package.json'), __filename]) {
+  const dirs = [configDir, projectPath, process.cwd()].filter(Boolean);
+  for (const base of [...dirs.map(dir => path.join(dir, 'package.json')), __filename]) {
     try {
       resolved = createRequire(base).resolve(request);
       break;
@@ -264,9 +281,13 @@ async function loadExtension(name, projectPath) {
   // import() 拿到的 default 对 CommonJS 是 module.exports，所以 exports.default 还要再取一层
   const exported = (await import(pathToFileURL(resolved).href)).default;
   const candidate = exported?.default ?? exported;
-  const extension = typeof candidate === 'function' ? candidate() : candidate;
+  return checkExtension(typeof candidate === 'function' ? candidate() : candidate, name, '默认导出要有 name 和 setup()，或是返回这样的对象的函数');
+}
+
+/** @throws 不是 { name, setup() } 形状时，消息里带上 requirement */
+function checkExtension(extension, name, requirement = '要有 name 和 setup()，或是返回这样的对象的函数') {
   if (!extension || typeof extension.name !== 'string' || typeof extension.setup !== 'function') {
-    throw new Error(`${name} 不是 wxa-runner 的扩展：默认导出要有 name 和 setup()，或是返回这样的对象的函数`);
+    throw new Error(`${name} 不是 wxa-runner 的扩展：${requirement}`);
   }
   return extension;
 }

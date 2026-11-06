@@ -18,7 +18,7 @@ declare global {
     __wxa_before_launch__?: (api: WxaTestApi) => unknown;
     /**
      * 由测试工具在页面脚本执行前设为 true，这次打开的小程序里 web-view 的网页在新窗口打开，
-     * 同开发服务器的 webViewWindow 选项（--webview-window）
+     * 同开发服务器的 webViewWindow 选项（配置文件 wxa.config.ts 的 webViewWindow）
      */
     __wxa_webview_window__?: boolean;
     /**

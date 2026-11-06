@@ -5,6 +5,8 @@
  * 所以检测到编程助手时默认转发；人在自己的终端里启动时用浏览器的开发者工具看，默认只转发报错。
  *
  * --extension 从用户项目里加载开发服务器扩展，CommonJS 和 ES 模块都可以。
+ *
+ * 配置文件 wxa.config.* 写项目里长期不变的启动参数，命令行写了的同名参数优先。
  */
 
 import { ChildProcess, spawn } from 'child_process';
@@ -21,10 +23,17 @@ const AGENT_ENV = /^(AI_AGENT|CLAUDECODE|CLAUDE_CODE|CODEX_|CURSOR_|GEMINI_CLI|O
 
 const running: ChildProcess[] = [];
 
-/** 启动 dev，返回启动信息（打印到基础库那一行为止） */
+const SHOWCASE = path.join(EXAMPLES, 'showcase');
+
+/** 启动 showcase 的 dev，返回启动信息（打印到基础库那一行为止） */
 function startDev(args: string[], env: Record<string, string> = {}, cwd?: string): Promise<string> {
+  return runDev([SHOWCASE, '--no-watch', '--port', '0', ...args], env, cwd);
+}
+
+/** 用给定的参数启动 dev，不预设项目目录和端口 */
+function runDev(args: string[], env: Record<string, string> = {}, cwd?: string): Promise<string> {
   const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !AGENT_ENV.test(key)));
-  const child = spawn(process.execPath, [CLI, 'dev', path.join(EXAMPLES, 'showcase'), '--no-watch', '--port', '0', ...args], {
+  const child = spawn(process.execPath, [CLI, 'dev', ...args], {
     cwd,
     env: { ...baseEnv, WXA_BASELIB: '', FORCE_COLOR: '0', ...env }
   });
@@ -91,7 +100,7 @@ describe.skipIf(!ready)('wxa-runner dev --extension', () => {
     const banner = await startDev(['--extension', 'fake-ext'], {}, projectWithExtension());
     const url = /假扩展\s+(\S+)/.exec(banner)?.[1];
     expect(url).toMatch(/\/__fake__\/$/);
-    expect(await (await fetch(url!)).text()).toBe(`root=${path.join(EXAMPLES, 'showcase')}`);
+    expect(await (await fetch(url!)).text()).toBe(`root=${SHOWCASE}`);
   });
 
   it('可以写多次，也可以是文件路径', async () => {
@@ -127,5 +136,74 @@ describe.skipIf(!ready)('wxa-runner dev --extension', () => {
   it('模块不是扩展时说明要求', async () => {
     const cwd = createProject({ 'not-ext.js': 'module.exports = { hello: 1 };' });
     await expect(startDev(['--extension', './not-ext.js'], {}, cwd)).rejects.toThrow(/不是 wxa-runner 的扩展/);
+  });
+});
+
+describe.skipIf(!ready)('wxa-runner dev 的配置文件', () => {
+  const line = (banner: string, label: string) => banner.split('\n').find(text => text.trim().startsWith(label));
+
+  it('当前目录的 wxa.config.ts 写了项目目录时，命令行不写项目目录也能启动，启动信息给出配置文件', async () => {
+    const cwd = createProject({
+      'wxa.config.ts': `
+        import type { WxaConfig } from 'wxa-runner';
+        import path from 'path';
+
+        export default {
+          project: path.relative(__dirname, ${JSON.stringify(SHOWCASE)}),
+          port: 0,
+          watch: false,
+          extensions: [{ name: 'inline', setup: () => ({ entry: { label: '内联扩展', path: '/__inline__/' } }) }]
+        } satisfies WxaConfig;`
+    });
+
+    const banner = await runDev([], {}, cwd);
+
+    expect(line(banner, '配置')).toContain(path.join(cwd, 'wxa.config.ts'));
+    expect(line(banner, '项目')).toContain(SHOWCASE);
+    expect(banner).toMatch(/内联扩展\s+\S+\/__inline__\//);
+  });
+
+  it('配置文件里的参数生效，命令行写了的同名参数优先', async () => {
+    const cwd = createProject({ 'wxa.config.mjs': 'export default { forwardConsole: false };' });
+
+    expect(line(await startDev([], {}, cwd), '控制台')).toContain('不转发');
+    expect(line(await startDev(['--forward-console'], {}, cwd), '控制台')).toContain('console.warn');
+  });
+
+  it('-c 指定其他位置的配置文件，CommonJS 也可以，里面的路径相对配置文件所在目录', async () => {
+    // 子进程的当前目录是真实路径（macOS 的临时目录在符号链接 /var 下），相对路径要从真实路径算
+    const cwd = fs.realpathSync(createProject({
+      'config/local-ext.js': `module.exports = { name: 'local', setup: () => ({ entry: { label: 'local', path: '/__local__/' } }) };`
+    }));
+    const project = path.relative(path.join(cwd, 'config'), SHOWCASE);
+    fs.writeFileSync(path.join(cwd, 'config/wxa.config.cjs'), `module.exports = {
+      project: ${JSON.stringify(project)},
+      port: 0,
+      watch: false,
+      extensions: ['./local-ext.js']
+    };`);
+
+    const banner = await runDev(['-c', 'config/wxa.config.cjs'], {}, cwd);
+
+    expect(line(banner, '项目')).toContain(SHOWCASE);
+    expect(banner).toMatch(/local\s+\S+\/__local__\//);
+  });
+
+  it('配置文件里有不认识的配置项时提示并忽略', async () => {
+    const cwd = createProject({ 'wxa.config.js': 'module.exports = { baseLibVersion: "3.0.0" };' });
+    expect(await startDev([], {}, cwd)).toMatch(/不认识的配置项：baseLibVersion/);
+  });
+
+  it('默认导出不是对象时说明写法并退出', async () => {
+    const cwd = createProject({ 'wxa.config.mjs': 'export const port = 0;' });
+    await expect(startDev([], {}, cwd)).rejects.toThrow(/要默认导出一个对象/);
+  });
+
+  it('-c 指定的配置文件不存在时退出', async () => {
+    await expect(startDev(['-c', 'missing.config.js'], {}, createProject({}))).rejects.toThrow(/找不到配置文件/);
+  });
+
+  it('命令行和配置文件都没写项目目录时说明怎么写', async () => {
+    await expect(runDev(['--port', '0'], {}, createProject({}))).rejects.toThrow(/缺少项目目录/);
   });
 });

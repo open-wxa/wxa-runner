@@ -81,7 +81,7 @@ web-view 的网页默认嵌在模拟器页面（`http://localhost:端口`）的 
 服务端下发的 `SameSite=Lax`、`Strict` 或不写 SameSite 的 Cookie 存不下来，JS 写的 Cookie 也写不进去，登录态因此丢失。微信里的小程序没有这个问题，web-view 里的网页是顶层页面。
 协议不同也算跨站：https 的 localhost 网页嵌在 http 的模拟器里同样受影响。遇到这种情况，控制台会提示一次。
 
-需要 Cookie 时开启新窗口模式：命令行加 `--webview-window`，Playwright 用 `test.use({ wxaWebView: 'window' })`（见[测试 web-view 里的网页](./testing.md#web-view-里的网页)）。
+需要 Cookie 时开启新窗口模式：[配置文件](./cli.md#配置文件)里写 `webViewWindow: true`，Playwright 用 `test.use({ wxaWebView: 'window' })`（见[测试 web-view 里的网页](./testing.md#web-view-里的网页)）。
 网页在一个手机尺寸的新窗口里打开，用真实的域名和协议，Cookie 和在浏览器里直接打开一样。模拟器里 web-view 的位置显示一个占位：
 
 - 窗口跟着 web-view 所在的页面：跳到下一页、切换 tab 时关闭，返回时用当前的 `src` 重新打开；页面关闭、模拟器刷新时一起关闭
