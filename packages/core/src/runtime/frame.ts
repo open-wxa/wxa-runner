@@ -58,7 +58,15 @@ if (kind === 'service') {
   };
   // 新版基础库在业务代码所在的子上下文里自己替换 Function；单上下文的基础库（3.7.0 及以前）不替换
   const businessCodeHere = !subContextId && !script.dataset.appService;
-  hookRequire(businessCodeHere ? reserveFunctionConstructor() : undefined);
+  if (businessCodeHere) {
+    const reserve = reserveFunctionConstructor();
+    hookRequire(() => {
+      reserve();
+      degradeThrowingGlobals();
+    });
+  } else {
+    hookRequire();
+  }
   g.createCustomImage = createCustomImage;
   moveCanvasesIntoPages();
 } else {
@@ -130,6 +138,46 @@ function reserveFunctionConstructor(): () => void {
  * 而异（3.7.0 直接写 globalThis，并不调 __passWAServiceGlobal__），事后包装没有可靠的时机。
  * installApiStubs 幂等，每次 require 都查一遍，不赌某一次调用的先后。
  */
+/**
+ * 基础库初始化时会把伴生 SDK 子包的全局（__cloudSDKMain__ / ADSDK / __splashAdFloatWindowSDK__ 等）
+ * 挂成读取时同步加载 SDK 的存取器。真机和开发者工具由原生层把伴生文件加载进上下文，读取不抛；
+ * 浏览器运行时没有这套加载机制（见 sdkStubs.ts），读取在基础库内部抛 TypeError。
+ *
+ * 业务代码直接读它们会崩，更隐蔽的是 Taro 这类全局垫片：把宿主全局的可枚举属性逐个读取后
+ * 拷贝进垫片对象（br[e]=i[e]），读到任何一个抛错的属性，整个垫片模块加载失败、垫片半途而废，
+ * 下游依赖垫片的代码（包括以为垫片上有 addEventListener 的分包代码）跟着出错。
+ *
+ * 对齐真机行为：读取即抛的属性改成「返回 undefined」的存取器。在业务代码执行前做一次——
+ * 基础库初始化完这些存取器已经就位，defineProperty 降级持久生效；不可配置的属性跳过。
+ */
+function degradeThrowingGlobals() {
+  const warned = new Set<PropertyKey>();
+  for (const key of Object.getOwnPropertyNames(g)) {
+    try {
+      void (g as Record<PropertyKey, unknown>)[key];
+      continue;
+    } catch {
+      // 读取即抛的就是要降级的伴生 SDK 全局
+    }
+    try {
+      Object.defineProperty(g, key, {
+        get() {
+          if (!warned.has(key)) {
+            warned.add(key);
+            console.warn(`[wxa-runner] 全局 ${String(key)} 的伴生 SDK 子包在浏览器运行时不可用，读取返回 undefined`);
+          }
+          return undefined;
+        },
+        set() {},
+        configurable: true,
+        enumerable: true
+      });
+    } catch {
+      // 属性不可配置，保持基础库原样
+    }
+  }
+}
+
 function hookRequire(beforeBusinessCode?: () => void) {
   let real: unknown;
   let businessCodeStarted = false;
