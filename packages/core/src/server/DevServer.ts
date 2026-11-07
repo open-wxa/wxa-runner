@@ -53,6 +53,7 @@ import { requireUsableTicket, WechatDevClient } from './wechatDev';
 import { bundleSetup, collectSetupEnv, findSetupFile } from './setup';
 import { ProjectWatcher, watchProject } from './watcher';
 import { applyExtensions, DevServerExtension, ExtensionEntry } from './extensions';
+import { patchBaseLibScript } from './baselibCompat';
 
 /** 注入每个渲染层页面的脚本，src 与 content 二选一 */
 export type WebviewScript = ({ src: string; content?: never } | { content: string; src?: never }) & {
@@ -124,8 +125,13 @@ export interface DevServerOptions {
    * 不能改变行数，编译错误和热更新才能对应到源文件；相同输入要返回相同输出。源文件不会被修改
    */
   wxmlTransform?: (code: string, file: string) => string;
-  /** 开发服务器扩展：把上面几个扩展点打包在一起的开发工具，按顺序合并在直接给出的选项之后，见 extensions.ts */
-  extensions?: DevServerExtension[];
+  /**
+   * JS 模块包装进 define 前的转换，file 是相对小程序根目录的路径（如 pages/index/index.js）。
+   * 在「ES6 转 ES5」之后执行，返回的代码会内联进 define 包装；不能改变行数，DevTools 里的
+   * 行号和报错才能对应到源文件；相同输入要返回相同输出。源文件不会被修改
+   */
+  jsTransform?: (code: string, file: string) => string;
+  /** 开发服务器扩展：把上面几个扩展点打包在一起的开发工具，按顺序合并在直接给出的选项之后，见 extensions.ts */  extensions?: DevServerExtension[];
   logger?: Pick<Console, 'log' | 'warn' | 'error'>;
 }
 
@@ -185,7 +191,7 @@ export class DevServer {
     this.ticketSource = this.devtools?.findTicket ?? null;
     this.plugins = new PluginStore(this.ticketSource && new WechatDevClient(this.project.appid, this.ticketSource), this.logger);
     this.device = { ...DEFAULT_DEVICE, ...options.device };
-    this.builder = new AppBuilder(this.project, { wxmlTransform: extended.wxmlTransform });
+    this.builder = new AppBuilder(this.project, { wxmlTransform: extended.wxmlTransform, jsTransform: extended.jsTransform });
     this.setupFile = resolveSetupFile(options.setup, this.project.projectPath);
     this.setupEnv = collectSetupEnv(process.env);
     this.app = this.createApp();
@@ -358,6 +364,18 @@ export class DevServer {
     }));
     // 基础库脚本加入 DevTools 的忽略列表，原始代码就是脚本本身（换个地址，免得和脚本混为一个文件）
     const sourceMaps = new Map<string, string>();
+    // JS 脚本下发前应用浏览器运行时的兼容补丁（见 baselibCompat.ts），按文件缓存补丁结果
+    const baseLibScripts = new Map<string, string>();
+    app.get(/^\/__baselib__\/(.+\.js)$/, (req, res, next) => {
+      const file = path.resolve(this.baseLib.dir, req.params[0]);
+      if (!file.startsWith(this.baseLib.dir + path.sep) || !fs.existsSync(file)) return next();
+      let code = baseLibScripts.get(file);
+      if (code === undefined) {
+        code = patchBaseLibScript(fs.readFileSync(file, 'utf8'));
+        baseLibScripts.set(file, code);
+      }
+      res.type('javascript').set('Cache-Control', 'max-age=1d').set('SourceMap', `${path.basename(file)}.map`).send(code);
+    });
     app.get(/^\/__baselib__\/(.+\.js)\.map$/, (req, res, next) => {
       const file = path.resolve(this.baseLib.dir, req.params[0]);
       if (!file.startsWith(this.baseLib.dir + path.sep) || !fs.existsSync(file)) return next();

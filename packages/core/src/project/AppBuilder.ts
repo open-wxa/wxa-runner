@@ -65,6 +65,8 @@ type ChangeKind = 'config' | 'wxml' | 'wxss' | 'js';
 export interface AppBuilderOptions {
   /** wxml 交给 wcc 前的转换，见 DevServerOptions.wxmlTransform */
   wxmlTransform?: (code: string, file: string) => string;
+  /** JS 模块包装进 define 前的转换，见 DevServerOptions.jsTransform */
+  jsTransform?: (code: string, file: string) => string;
 }
 
 export class AppBuilder {
@@ -82,7 +84,7 @@ export class AppBuilder {
   /** 开启了 less / sass 编译插件时才有；插件设置变了就换一个 */
   private styleMirror: { setting: string; mirror: StyleMirror } | null = null;
 
-  constructor(readonly project: MiniProgram, options: AppBuilderOptions = {}) {
+  constructor(readonly project: MiniProgram, readonly options: AppBuilderOptions = {}) {
     this.wxmlMirror = options.wxmlTransform ? new WxmlMirror(options.wxmlTransform) : null;
   }
 
@@ -164,6 +166,7 @@ export class AppBuilder {
         return `console.error(${JSON.stringify(message)});\n`;
       }
     }
+    if (this.options.jsTransform) code = this.options.jsTransform(code, id);
     return `define(${JSON.stringify(id)}, function(${MODULE_PARAMS}){${code}\n});\n`;
   }
 

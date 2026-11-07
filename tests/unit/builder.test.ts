@@ -64,6 +64,30 @@ describe('JS 模块包装', () => {
   });
 });
 
+describe('jsTransform', () => {
+  const root = demoProject();
+  const mark = (code: string) => code.replace('Page(', 'Page/*marked*/(');
+
+  it('包装进 define 前应用转换，源文件不变', () => {
+    const builder = new AppBuilder(new MiniProgram(root), { jsTransform: mark });
+    const script = builder.getModuleScript('pages/a/a.js');
+    expect(script).toContain('Page/*marked*/(');
+    expect(fs.readFileSync(path.join(root, 'pages/a/a.js'), 'utf8')).not.toContain('/*marked*/');
+  });
+
+  it('在「ES6 转 ES5」之后执行，转换结果同样生效', () => {
+    const builder = new AppBuilder(new MiniProgram(root), { jsTransform: (code, file) => (expect(file).toBe('utils/esm.js'), code.replace('require', 'require/*marked*/')) });
+    const script = builder.getModuleScript('utils/esm.js');
+    expect(script).toContain('require/*marked*/');
+    expect(script).not.toMatch(/^\s*import /m);
+  });
+
+  it('没有设置转换时模块代码原样包装', () => {
+    const builder = new AppBuilder(new MiniProgram(root));
+    expect(builder.getModuleScript('pages/a/a.js')).not.toContain('/*marked*/');
+  });
+});
+
 /** 像逻辑层一样执行 define 包装好的模块，返回它的 module.exports */
 function runModule(script: string): any {
   const module = { exports: {} };
