@@ -2,7 +2,7 @@
 
 > Run WeChat Mini Programs in a regular browser on the **official base library**. Built for local debugging and end-to-end testing.
 
-**[Docs (in Chinese)](https://open-wxa.github.io/wxa-runner/)** · [Live demo](https://wxa-viewer.picfinder.workers.dev) · English · [中文](./README.md)
+**[Docs (in Chinese)](https://open-wxa.github.io/wxa-runner/)** · [Live demo](https://wxa-viewer.picfinder.workers.dev) · English · [中文](./README.md) · [日本語](./README.ja.md)
 
 ```bash
 npx wxa-runner dev ./dist/dev/mp-weixin   # a native mini program, or uni-app / Taro build output

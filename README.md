@@ -2,7 +2,7 @@
 
 > 在普通浏览器里，用**微信官方基础库**运行小程序。用于本地调试和 E2E 自动化测试。
 
-**[文档](https://open-wxa.github.io/wxa-runner/)** · [在线预览](https://wxa-viewer.picfinder.workers.dev) · [English](./README.en.md) · 中文
+**[文档](https://open-wxa.github.io/wxa-runner/)** · [在线预览](https://wxa-viewer.picfinder.workers.dev) · [English](./README.en.md) · 中文 · [日本語](./README.ja.md)
 
 ```bash
 npx wxa-runner dev ./dist/dev/mp-weixin   # 原生小程序目录，或 uni-app / Taro 编译产物
