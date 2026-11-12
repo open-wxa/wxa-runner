@@ -1,5 +1,12 @@
 # 更新日志
 
+## [0.13.1](https://github.com/open-wxa/wxa-runner/compare/v0.13.0...v0.13.1) (2026-11-12)
+
+
+### 问题修复
+
+* 鼠标拖动可以滚动 scroll-view 和页面 ([#126](https://github.com/open-wxa/wxa-runner/issues/126)) ([50b1a40](https://github.com/open-wxa/wxa-runner/commit/50b1a40ce7d98216f8bef558f899a535dec4e577)), closes [#125](https://github.com/open-wxa/wxa-runner/issues/125)
+
 ## [0.13.0](https://github.com/open-wxa/wxa-runner/compare/v0.12.4...v0.13.0) (2026-11-06)
 
 
