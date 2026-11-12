@@ -364,14 +364,32 @@ function overrideUserAgent() {
  * 按第一个 touchmove 的位移判断手势方向，鼠标刚拖动时常先抖出 1px 的竖向位移，直接转发的话横向拖动
  * 会被判成竖向、整次拖动都被忽略。阈值小于基础库取消 tap 的 10px，点击和长按不受影响。
  * 没移出阈值就松手时，先补一个到松手位置的 touchmove，slider 微调、画短笔画这类小幅拖动不会丢。
+ *
+ * 合成的触摸事件不会让浏览器滚动，scroll-view、可滚动的页面只能靠触控板或滚轮滚，鼠标横向拖不动（#125）。
+ * 所以按真机的规则补上滚动：第一个 touchmove 时选定手指下最近的、沿主拖动方向还能滚的元素，之后只在它允许
+ * 用户滚动的方向上跟随位移；touchstart 或当次 touchmove 被 preventDefault（如 catchtouchstart、catchtouchmove）就不滚。
+ * 有滚动吸附（paging-enabled）的容器拖动期间不吸附，松手后吸到最近的一页。
+ * 按下要等两帧才派发，上一次按压的事件可能还在队列里，所以每次按压的状态各自保存，排队的回调只读自己那份。
+ * 手机上没有拖放，按下时在图片（如 rich-text 里的 img）或链接上也不能开始浏览器的拖放，否则后续的
+ * mousemove、mouseup 收不到，这次触摸就停在半路。
  */
 function installInput() {
   const SCROLL_TAP_GUARD = 80;
   const TOUCH_SLOP = 8;
   let lastScroll = 0;
   let queue: Promise<void> = Promise.resolve();
-  let target: EventTarget | null = null;
-  let start: { x: number; y: number } | null = null;
+  let press: Press | null = null;
+
+  interface Press {
+    target: EventTarget;
+    /** 还没移出 TOUCH_SLOP 时是按下的位置，移出后为 null */
+    start: { x: number; y: number } | null;
+    last: { x: number; y: number };
+    /** 要跟随滚动的元素：第一个 touchmove 时选定，undefined 表示还没选，null 表示不滚 */
+    scroller?: HTMLElement | null;
+    /** 拖动期间关掉了 scroller 的滚动吸附，松手时恢复成这个内联值 */
+    snapType?: string;
+  }
 
   document.addEventListener('scroll', () => {
     lastScroll = Date.now();
@@ -380,7 +398,12 @@ function installInput() {
   const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
   const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
-  const fire = (type: 'touchstart' | 'touchmove' | 'touchend', event: MouseEvent, eventTarget: EventTarget) => {
+  const fire = (
+    type: 'touchstart' | 'touchmove' | 'touchend',
+    event: MouseEvent,
+    eventTarget: EventTarget,
+    afterDispatch?: (prevented: boolean) => void
+  ) => {
     const point = {
       clientX: event.clientX,
       clientY: event.clientY,
@@ -398,7 +421,7 @@ function installInput() {
       }
       const touch = new Touch({ identifier: 1, target: eventTarget, ...point });
       const active = type === 'touchend' ? [] : [touch];
-      eventTarget.dispatchEvent(new TouchEvent(type, {
+      const passed = eventTarget.dispatchEvent(new TouchEvent(type, {
         bubbles: true,
         cancelable: true,
         composed: true,
@@ -406,39 +429,100 @@ function installInput() {
         targetTouches: active,
         changedTouches: [touch]
       }));
+      afterDispatch?.(!passed);
+    });
+  };
+
+  const move = (event: MouseEvent, current: Press) => {
+    const dx = event.clientX - current.last.x;
+    const dy = event.clientY - current.last.y;
+    current.last = { x: event.clientX, y: event.clientY };
+    fire('touchmove', event, current.target, prevented => {
+      if (prevented || current.scroller === null) return;
+      if (current.scroller === undefined) {
+        current.scroller = findScroller(current.target, dx, dy);
+        // paging-enabled 等带 scroll-snap 的容器，每次脚本滚几像素都会被吸到下一页，一次拖动就翻到底；
+        // 手指拖动时浏览器也不吸附，松手才吸
+        if (current.scroller && getComputedStyle(current.scroller).scrollSnapType !== 'none') {
+          current.snapType = current.scroller.style.scrollSnapType;
+          current.scroller.style.scrollSnapType = 'none';
+        }
+      }
+      current.scroller?.scrollBy({
+        left: userScrollable(current.scroller, 'x') ? -dx : 0,
+        top: userScrollable(current.scroller, 'y') ? -dy : 0,
+        behavior: 'instant'
+      });
     });
   };
 
   window.addEventListener('mousedown', event => {
     event.stopImmediatePropagation();
     if (event.button !== 0 || !event.target) return;
-    target = event.target;
-    start = { x: event.clientX, y: event.clientY };
-    fire('touchstart', event, target);
+    const current: Press = { target: event.target, start: { x: event.clientX, y: event.clientY }, last: { x: event.clientX, y: event.clientY } };
+    press = current;
+    fire('touchstart', event, current.target, prevented => {
+      if (prevented) current.scroller = null;
+    });
   }, true);
   window.addEventListener('mousemove', event => {
     event.stopImmediatePropagation();
-    if (!target) return;
-    if (start) {
-      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) < TOUCH_SLOP) return;
-      start = null;
+    if (!press) return;
+    if (press.start) {
+      if (Math.hypot(event.clientX - press.start.x, event.clientY - press.start.y) < TOUCH_SLOP) return;
+      press.start = null;
     }
-    fire('touchmove', event, target);
+    move(event, press);
   }, true);
   window.addEventListener('mouseup', event => {
     event.stopImmediatePropagation();
-    if (!target) return;
-    if (start && (event.clientX !== start.x || event.clientY !== start.y)) {
-      fire('touchmove', event, target);
+    if (!press) return;
+    if (press.start && (event.clientX !== press.start.x || event.clientY !== press.start.y)) {
+      move(event, press);
       // movable-view 等组件在下一帧才应用位移，同一帧里就收到 touchend 的话这段位移会被丢掉
       queue = queue.then(nextFrame);
     }
-    fire('touchend', event, target);
-    target = null;
+    const current = press;
+    fire('touchend', event, current.target, () => {
+      if (!current.scroller || current.snapType === undefined) return;
+      current.scroller.style.scrollSnapType = current.snapType;
+      // 恢复吸附后按当前位置滚一次，浏览器会吸到最近的吸附点
+      current.scroller.scrollTo({ left: current.scroller.scrollLeft, top: current.scroller.scrollTop, behavior: 'smooth' });
+    });
+    press = null;
+  }, true);
+  window.addEventListener('dragstart', event => {
+    if (press) event.preventDefault();
   }, true);
   for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
     window.addEventListener(type, event => {
       if ((event as PointerEvent).pointerType !== 'touch') event.stopImmediatePropagation();
     }, true);
   }
+}
+
+/**
+ * 手指移动 (dx, dy) 时滚动哪个元素：从 node 往上第一个沿主方向允许滚动、且这个方向还没滚到头的元素，
+ * 和触屏一样内层到头了就交给外层。都不能滚时返回 null
+ */
+function findScroller(node: EventTarget, dx: number, dy: number): HTMLElement | null {
+  const axis = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+  // 手指往左/上移，内容往右/下滚
+  const forward = (axis === 'x' ? dx : dy) < 0;
+  for (let el = node instanceof HTMLElement ? node : node instanceof Element ? node.parentElement : null; el; el = el.parentElement) {
+    if (!userScrollable(el, axis)) continue;
+    const [position, size, client] = axis === 'x'
+      ? [el.scrollLeft, el.scrollWidth, el.clientWidth]
+      : [el.scrollTop, el.scrollHeight, el.clientHeight];
+    if (forward ? position + client < size - 1 : position > 0) return el;
+  }
+  return null;
+}
+
+/** el 的内容沿 axis 超出、且样式允许用户沿 axis 滚动（overflow:hidden 只能由脚本滚动） */
+function userScrollable(el: Element, axis: 'x' | 'y'): boolean {
+  const overflow = getComputedStyle(el)[axis === 'x' ? 'overflowX' : 'overflowY'];
+  const overflows = axis === 'x' ? el.scrollWidth > el.clientWidth : el.scrollHeight > el.clientHeight;
+  if (!overflows) return false;
+  return el === document.scrollingElement ? overflow !== 'hidden' && overflow !== 'clip' : overflow === 'auto' || overflow === 'scroll';
 }
