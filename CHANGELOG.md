@@ -1,5 +1,16 @@
 # 更新日志
 
+## [0.13.1](https://github.com/open-wxa/wxa-runner/compare/v0.13.0...v0.13.1) (2026-11-12)
+
+
+### 问题修复
+
+* 鼠标拖动可以滚动 scroll-view 和页面 ([#126](https://github.com/open-wxa/wxa-runner/issues/126)) ([50b1a40](https://github.com/open-wxa/wxa-runner/commit/50b1a40ce7d98216f8bef558f899a535dec4e577)), closes [#125](https://github.com/open-wxa/wxa-runner/issues/125)
+
+### 致谢
+
+* 感谢 [@ggbdpq](https://github.com/ggbdpq) 在 [#112](https://github.com/open-wxa/wxa-runner/pull/112) 中定位了 Taro 项目启动失败的根因：Taro 的全局垫片逐个拷贝全局属性时读到基础库伴生 SDK 的存取器而抛错，垫片只初始化了一半，分包页随后报 `addEventListener is not a function`。这个问题已在 0.12.4 由 [#114](https://github.com/open-wxa/wxa-runner/issues/114) 修复，ggbdpq 还在真实的 Taro 3.4.3 项目（171 个页面、19 个分包）上验证了修复。
+
 ## [0.13.0](https://github.com/open-wxa/wxa-runner/compare/v0.12.4...v0.13.0) (2026-11-06)
 
 
