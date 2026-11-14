@@ -15,6 +15,7 @@ import {
   MiniProgramStorage
 } from '../../packages/core/src/runtime/host/api/storage';
 import { applySetup, formatSetupSummary } from '../../packages/core/src/runtime/host/setup';
+import { WebViewUrlHooks } from '../../packages/core/src/runtime/host/webViewUrlHooks';
 import { defineSetup } from '../../packages/core/src/setup';
 
 function memoryStore(): KeyValueStore {
@@ -53,7 +54,7 @@ function createTarget() {
     const result = invoke('getStorageSync', { key }) as any;
     return result.errMsg.endsWith(':ok') ? decodeStorageValue(result) : undefined;
   };
-  return { target: { storage, api, routes }, invoke, readStorage, request, events };
+  return { target: { storage, api, routes, webViews: new WebViewUrlHooks() }, invoke, readStorage, request, events };
 }
 
 describe('setup 预置存储', () => {
@@ -282,7 +283,7 @@ describe('setup 的写法', () => {
 
   it('写错的配置项直接报错，并列出可用的配置项', async () => {
     const { target } = createTarget();
-    await expect(applySetup({ storge: { token: 'x' } } as any, target, {})).rejects.toThrow(/storge.*storage, mock, network, run/);
+    await expect(applySetup({ storge: { token: 'x' } } as any, target, {})).rejects.toThrow(/storge.*storage, mock, network, webView, run/);
   });
 
   it('setup 默认导出不是对象或函数时报错', async () => {
@@ -307,5 +308,57 @@ describe('setup 执行摘要', () => {
     expect(text).toMatch(/storage\s+token, userInfo/);
     expect(text).toMatch(/mock\s+login, getLocation/);
     expect(text).toMatch(/network\s+POST \*\*\/auth\/login/);
+  });
+});
+
+describe('setup 改写 web-view 地址', () => {
+  const context = { pagePath: 'pages/webview/container/container', webviewId: 1, htmlId: 1 };
+
+  it('声明式规则生效，摘要里记一条', async () => {
+    const { target } = createTarget();
+    const summary = await applySetup(defineSetup({
+      webView: { rewriteUrl: url => `${url}&wxa_sim=runner` }
+    }), target, {});
+
+    expect(summary.webView).toBe(1);
+    expect(target.webViews.rewrite('https://h5.example/a?b=1', context)).toBe('https://h5.example/a?b=1&wxa_sim=runner');
+    expect(formatSetupSummary(summary)).toMatch(/webView\s+1 条改写规则/);
+  });
+
+  it('run 里能追加规则，按注册顺序依次生效', async () => {
+    const { target } = createTarget();
+    await applySetup(defineSetup({
+      webView: { rewriteUrl: url => `${url}#first` },
+      run(wxa) {
+        wxa.rewriteWebViewUrl(url => `${url}&second=1`);
+      }
+    }), target, {});
+
+    expect(target.webViews.rewrite('https://h5.example/a?b=1', context)).toBe('https://h5.example/a?b=1#first&second=1');
+  });
+
+  it('规则返回空值或抛错时保持原地址，不影响后续规则', async () => {
+    const { target } = createTarget();
+    await applySetup(defineSetup({
+      webView: { rewriteUrl: () => undefined },
+      run(wxa) {
+        wxa.rewriteWebViewUrl(() => {
+          throw new Error('规则写错了');
+        });
+        wxa.rewriteWebViewUrl(url => `${url}&third=1`);
+      }
+    }), target, {});
+
+    expect(target.webViews.rewrite('https://h5.example/a', context)).toBe('https://h5.example/a&third=1');
+  });
+
+  it('webView 配置写错时启动阶段报错', async () => {
+    const { target } = createTarget();
+    await expect(applySetup({ webView: { rewriteUrl: 'x' } } as any, target, {}))
+      .rejects.toThrow(/webView\.rewriteUrl 需要是函数/);
+    await expect(applySetup({ webView: { rewrite: () => '' } } as any, target, {}))
+      .rejects.toThrow(/webView 下未知的配置项 rewrite/);
+    await expect(applySetup({ webView: 'x' } as any, target, {}))
+      .rejects.toThrow(/webView 需要是 \{ rewriteUrl: 函数 \} 形式的对象/);
   });
 });

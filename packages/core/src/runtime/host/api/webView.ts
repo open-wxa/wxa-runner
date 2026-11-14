@@ -14,6 +14,7 @@
  */
 
 import type { DeviceProfile } from '../../types';
+import type { WebViewRewriteContext } from '../../../setup';
 import { ApiHandler, fail, ok } from './registry';
 
 export interface WebViewApiOptions {
@@ -23,6 +24,10 @@ export interface WebViewApiOptions {
   emitToWebview(webviewId: number, event: string, data: unknown): void;
   /** 新窗口模式下网页在这里打开；默认的 iframe 模式为 null */
   windows: WebViewWindows | null;
+  /** 加载前改写网页地址（setup 里声明的规则），没配置时为 undefined */
+  rewriteUrl?(url: string, context: WebViewRewriteContext): string;
+  /** 页面路径，作为改写规则的上下文；拿不到时为 null */
+  pagePathOf?(webviewId: number): string | null;
 }
 
 /** web-view 当前显示的网页，供测试 API 查询 */
@@ -39,8 +44,9 @@ interface Position {
   height: number;
 }
 
-export function createWebViewApis({ documentOf, emitToWebview, windows }: WebViewApiOptions): Record<string, ApiHandler> {
-  if (windows) return createWindowApis(documentOf, windows);
+export function createWebViewApis(options: WebViewApiOptions): Record<string, ApiHandler> {
+  const { documentOf, emitToWebview, windows } = options;
+  if (windows) return createWindowApis(options);
 
   // 三个接口都由网页所在的渲染层调用，到那个文档里按 htmlId 找；不另存引用，页面关闭时随文档一起释放
   const find = (webviewId: number, htmlId: unknown) =>
@@ -83,7 +89,7 @@ export function createWebViewApis({ documentOf, emitToWebview, windows }: WebVie
       if (!frame) return fail(api, 'web-view not found');
       place(frame, args.position);
       if (args.src) {
-        const src = String(args.src);
+        const src = rewriteSrc(options, webviewId, args.htmlId, String(args.src));
         warnCrossSite(src);
         frame.dataset.wxaLoading = src;
         frame.dataset.wxaSrc = src;
@@ -104,7 +110,9 @@ export function createWebViewApis({ documentOf, emitToWebview, windows }: WebVie
  * 新窗口模式的三个接口：渲染层里只放一个占位，网页交给 WebViewWindows 在新窗口里打开。
  * 跨域窗口的加载完成监听不到，不派发 onWebviewStartLoad / onWebviewFinishLoad，bindload 不会触发
  */
-function createWindowApis(documentOf: WebViewApiOptions['documentOf'], windows: WebViewWindows): Record<string, ApiHandler> {
+function createWindowApis(options: WebViewApiOptions): Record<string, ApiHandler> {
+  const { documentOf, windows } = options;
+  if (!windows) throw new Error('createWindowApis 需要 windows');
   return {
     insertHTMLWebView: (args, { api, webviewId }) => {
       const doc = documentOf(webviewId);
@@ -114,7 +122,8 @@ function createWindowApis(documentOf: WebViewApiOptions['documentOf'], windows: 
     },
 
     updateHTMLWebView: (args, { api, webviewId }) => {
-      if (!windows.update(webviewId, Number(args.htmlId), args.position, args.src ? String(args.src) : undefined)) {
+      const src = args.src ? rewriteSrc(options, webviewId, args.htmlId, String(args.src)) : undefined;
+      if (!windows.update(webviewId, Number(args.htmlId), args.position, src)) {
         return fail(api, 'web-view not found');
       }
       return ok(api);
@@ -125,6 +134,16 @@ function createWindowApis(documentOf: WebViewApiOptions['documentOf'], windows: 
       return ok(api);
     }
   };
+}
+
+/** 按 setup 里的规则改写地址；没有规则时原样返回 */
+function rewriteSrc(options: WebViewApiOptions, webviewId: number, htmlId: unknown, src: string): string {
+  if (!options.rewriteUrl) return src;
+  return options.rewriteUrl(src, {
+    pagePath: options.pagePathOf?.(webviewId) ?? null,
+    webviewId,
+    htmlId: Number(htmlId)
+  });
 }
 
 /** iframe 模式下当前页面里的 web-view，按创建顺序；还没设置 src 的不算 */

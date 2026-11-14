@@ -95,12 +95,34 @@ export interface NetworkConfig {
   routes?: Record<string, RouteHandler>;
 }
 
+/** web-view 改写时提供的上下文 */
+export interface WebViewRewriteContext {
+  /** web-view 所属页面，如 pages/index/index；页面已关闭时为 null */
+  pagePath: string | null;
+  /** web-view 所在渲染层的编号 */
+  webviewId: number;
+  /** 页面里 web-view 的 htmlId */
+  htmlId: number;
+}
+
+/** 改写 web-view 的地址：返回字符串则替换，返回 undefined / 空串则保持原样 */
+export type WebViewUrlRewrite = (url: string, context: WebViewRewriteContext) => string | void;
+
+export interface WebViewConfig {
+  /**
+   * web-view 真正加载前改写地址，iframe 内嵌和新窗口两种模式都生效。
+   * 典型用途：模拟器里给 H5 追加一个只在本机出现的标记
+   */
+  rewriteUrl?: WebViewUrlRewrite;
+}
+
 export interface SetupConfig {
   /** 预置到 wx.setStorage 的数据，值保持原类型（对象、数字、Date 等），覆盖同名旧值 */
   storage?: Record<string, unknown>;
   /** 按 wx API 名覆盖原生实现，如 login、getLocation */
   mock?: MockConfig;
   network?: NetworkConfig;
+  webView?: WebViewConfig;
   /** 声明式配置之后执行，适合异步或动态逻辑（如现场向测试后端换一个新 token） */
   run?(wxa: SetupApi): void | Promise<void>;
 }
@@ -120,6 +142,8 @@ export interface SetupApi {
   mock<K extends string>(api: K, impl: K extends keyof KnownMocks ? NonNullable<KnownMocks[K]> : MockValue): void;
   /** 与 network.routes 相同，后添加的规则优先 */
   route(pattern: string, handler: RouteHandler): void;
+  /** 与 webView.rewriteUrl 相同；多条规则按添加顺序依次执行，后添加的拿到前面的结果 */
+  rewriteWebViewUrl(rewrite: WebViewUrlRewrite): void;
   /** 经开发服务器代理发请求，没有跨域限制 */
   fetch(url: string, init?: { method?: string; header?: Record<string, string>; body?: string }): Promise<Response>;
 }

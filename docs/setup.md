@@ -233,6 +233,28 @@ export default defineSetup({
 - `res.data` 和真机一样由请求的 `responseType` 决定：`arraybuffer` 时是 ArrayBuffer，否则是文本，JSON 文本解析成对象
 - `downloadFile`、`uploadFile`、`connectSocket` 暂不拦截
 
+### webView
+
+web-view 真正加载前改写网页地址，iframe 内嵌和新窗口两种模式都生效。目前只有 `rewriteUrl` 一项：
+
+```ts
+export default defineSetup(() => ({
+  webView: {
+    rewriteUrl(url, context) {
+      // 幂等：已经带过就不要再拼
+      if (/[?&]wxa_sim=/.test(url)) return url;
+      return `${url}${url.includes('?') ? '&' : '?'}wxa_sim=runner`;
+    }
+  }
+}));
+```
+
+- 返回字符串则替换地址，返回 `undefined` 或空串则保持原样；只处理 `http(s)` 地址
+- 多条规则依次执行，写在后面的拿到的是前一条的结果；命令式追加用 `wxa.rewriteWebViewUrl(fn)`，排在已有规则之后执行
+- 单条规则抛错时只打印警告并跳过，不影响网页加载
+- `context` 里有 `pagePath`（web-view 所属页面）、`webviewId`、`htmlId`，可以按页面决定改不改
+- 用途举例：有些 H5 只按 UA 判断"是不是在小程序里"，而浏览器里改不了 iframe 的 UA，可以在地址上追加一个只在本机出现的标记，让 H5 在模拟器里走小程序分支
+
 ### run
 
 前三项之后执行的函数，可以是 async 的，适合先发请求、再决定写什么。参数 `wxa` 有：
@@ -245,6 +267,7 @@ export default defineSetup({
 | `wxa.storage.remove(key)` / `clear()` | 删除一项 / 清空 |
 | `wxa.mock(api, impl)` | 替换原生 API，同 [`mock`](#mock) |
 | `wxa.route(pattern, handler)` | 拦截请求，同 [`network.routes`](#network)，后添加的优先 |
+| `wxa.rewriteWebViewUrl(fn)` | 改写 web-view 地址，同 [`webView.rewriteUrl`](#webview)，按添加顺序依次执行，后添加的拿到前面的结果 |
 | `wxa.fetch(url, init?)` | 发请求，由开发服务器转发，不受浏览器跨域限制。`init` 可以有 `method`、`header`、`body`（字符串），返回标准的 `Response` |
 
 ## 注意事项
