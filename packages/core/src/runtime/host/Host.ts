@@ -27,6 +27,7 @@ import { createSystemApis } from './api/system';
 import { tempFileRootPath } from './api/tempFiles';
 import { createUiApis } from './api/ui';
 import { createWebViewApis, iframeWebViews, WebViewInfo, WebViewWindows } from './api/webView';
+import { WebViewUrlHooks } from './webViewUrlHooks';
 import { PageStack } from './PageStack';
 import { PageView } from './PageView';
 import { cloneInto, cloneNativeInto } from './realm';
@@ -85,6 +86,8 @@ export class Host implements HostApi {
   readonly storage: MiniProgramStorage;
   /** setup 和测试 API 声明的请求拦截 */
   readonly routes = new RequestRoutes();
+  /** setup 声明的 web-view 地址改写规则 */
+  readonly webViews = new WebViewUrlHooks();
   /** 把被拦截的请求显示在 Network 面板里 */
   private readonly mockMirror: MockMirror | null;
   private readonly mapOperations = new MapOperations((webviewId, event, data) => this.publishToPages(event, data, [webviewId]));
@@ -648,7 +651,9 @@ export class Host implements HostApi {
       ...createWebViewApis({
         documentOf: webviewId => this.pages.get(webviewId)?.win?.document,
         emitToWebview: (webviewId, event, data) => this.emitToWebview(webviewId, event, data),
-        windows: this.webViewWindows
+        windows: this.webViewWindows,
+        rewriteUrl: (url, context) => this.webViews.rewrite(url, context),
+        pagePathOf: webviewId => this.pages.get(webviewId)?.path ?? null
       }),
       ...createMiscApis(this.info.appid, {
         devtoolsLogin: this.info.devtoolsLogin,

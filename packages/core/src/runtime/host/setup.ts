@@ -5,26 +5,30 @@
  * wx.getStorageSync 读不到新值。
  */
 
-import type { MockValue, RouteHandler, SetupApi, SetupConfig, SetupEnv } from '../../setup';
+import type { MockValue, RouteHandler, SetupApi, SetupConfig, SetupEnv, WebViewUrlRewrite } from '../../setup';
 import { proxyFetch } from './api/network';
 import type { ApiRegistry } from './api/registry';
 import type { RequestRoutes } from './api/routes';
 import { decodeStorageValue, encodeStorageValue, MiniProgramStorage } from './api/storage';
+import type { WebViewUrlHooks } from './webViewUrlHooks';
 
 export interface SetupTarget {
   storage: MiniProgramStorage;
   api: ApiRegistry;
   routes: RequestRoutes;
+  webViews: WebViewUrlHooks;
 }
 
 export interface SetupSummary {
   storage: string[];
   mock: string[];
   network: string[];
+  webView: number;
 }
 
-const CONFIG_KEYS = ['storage', 'mock', 'network', 'run'];
+const CONFIG_KEYS = ['storage', 'mock', 'network', 'webView', 'run'];
 const NETWORK_KEYS = ['routes'];
+const WEBVIEW_KEYS = ['rewriteUrl'];
 const STORAGE_NAMESPACE = 's0';
 
 /** 基础库里这些 API 不经同名 invoke 实现，按 wx 的名字 mock 不会生效 */
@@ -37,7 +41,7 @@ const STORAGE_API = /^(get|set|remove|clear)Storage(Info)?(Sync)?$/;
  * @throws 配置写错或 setup 自身执行出错时；此时已应用的部分不会回滚，调用方不应继续启动小程序
  */
 export async function applySetup(definition: unknown, target: SetupTarget, env: SetupEnv): Promise<SetupSummary> {
-  const summary: SetupSummary = { storage: [], mock: [], network: [] };
+  const summary: SetupSummary = { storage: [], mock: [], network: [], webView: 0 };
   const record = (list: string[], name: string) => {
     if (!list.includes(name)) list.push(name);
   };
@@ -68,11 +72,18 @@ export async function applySetup(definition: unknown, target: SetupTarget, env: 
     record(summary.network, pattern);
   };
 
+  const rewriteWebViewUrl = (rewrite: WebViewUrlRewrite) => {
+    if (typeof rewrite !== 'function') throw new Error('rewriteWebViewUrl 需要传入函数');
+    target.webViews.add(rewrite);
+    summary.webView = target.webViews.size;
+  };
+
   const config = await resolveConfig(definition, env);
 
   for (const [key, value] of Object.entries(config.storage || {})) setStorage(key, value);
   for (const [api, impl] of Object.entries(config.mock || {})) mock(api, impl);
   for (const [pattern, handler] of Object.entries(config.network?.routes || {})) route(pattern, handler);
+  if (config.webView?.rewriteUrl) rewriteWebViewUrl(config.webView.rewriteUrl);
 
   if (config.run) {
     const wxa: SetupApi = {
@@ -88,6 +99,7 @@ export async function applySetup(definition: unknown, target: SetupTarget, env: 
       },
       mock: (api, impl) => mock(api, impl as MockValue),
       route,
+      rewriteWebViewUrl,
       fetch: (url, init = {}) => proxyFetch(url, { method: (init.method || 'GET').toUpperCase(), header: init.header, body: init.body })
         .then(res => new Response(NULL_BODY_STATUS.has(res.statusCode) ? null : res.response.body, {
           status: res.statusCode,
@@ -105,6 +117,7 @@ export function formatSetupSummary(summary: SetupSummary): string {
   if (summary.storage.length) lines.push(`  storage  ${summary.storage.join(', ')}`);
   if (summary.mock.length) lines.push(`  mock     ${summary.mock.join(', ')}`);
   if (summary.network.length) lines.push(`  network  ${summary.network.join(', ')}`);
+  if (summary.webView) lines.push(`  webView  ${summary.webView} 条改写规则`);
   return lines.join('\n');
 }
 
@@ -128,6 +141,16 @@ async function resolveConfig(definition: unknown, env: SetupEnv): Promise<SetupC
     if (unknownNetwork.length) throw new Error(`network 下未知的配置项 ${unknownNetwork.join(', ')}，可用的配置项：${NETWORK_KEYS.join(', ')}`);
     if (config.network.routes !== undefined && !isPlainObject(config.network.routes)) {
       throw new Error('network.routes 需要是 { 规则: 响应 } 形式的对象');
+    }
+  }
+  if (config.webView !== undefined) {
+    if (!isPlainObject(config.webView)) throw new Error('webView 需要是 { rewriteUrl: 函数 } 形式的对象');
+    const unknownWebView = Object.keys(config.webView).filter(key => !WEBVIEW_KEYS.includes(key));
+    if (unknownWebView.length) {
+      throw new Error(`webView 下未知的配置项 ${unknownWebView.join(', ')}，可用的配置项：${WEBVIEW_KEYS.join(', ')}`);
+    }
+    if (config.webView.rewriteUrl !== undefined && typeof config.webView.rewriteUrl !== 'function') {
+      throw new Error('webView.rewriteUrl 需要是函数，返回新的地址；不替换时返回 undefined');
     }
   }
   if (config.run !== undefined && typeof config.run !== 'function') throw new Error('run 需要是函数');
