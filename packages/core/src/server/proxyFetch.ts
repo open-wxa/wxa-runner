@@ -120,8 +120,13 @@ function relayResponse(upstream: Response): Response {
     responseHeaders[key] = value;
     if (!DROPPED_RESPONSE_HEADERS.has(key)) headers.set(key, value);
   });
-  headers.set('x-wxa-headers', encodeURIComponent(JSON.stringify(responseHeaders)));
   const setCookies = typeof upstream.headers.getSetCookie === 'function' ? upstream.headers.getSetCookie() : [];
+  // 微信的 res.header 里是 Set-Cookie（首字母大写），多个 cookie 用 ", " 连成一个；Fetch 的 Headers 只有小写，
+  // 读 res.header['Set-Cookie'] 的小程序靠它存 cookie，这里补一个同样内容的键
+  if (setCookies.length > 0 && !('Set-Cookie' in responseHeaders)) {
+    responseHeaders['Set-Cookie'] = setCookies.join(', ');
+  }
+  headers.set('x-wxa-headers', encodeURIComponent(JSON.stringify(responseHeaders)));
   headers.set('x-wxa-set-cookie', encodeURIComponent(JSON.stringify(setCookies)));
   return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers });
 }
