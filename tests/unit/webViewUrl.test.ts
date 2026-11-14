@@ -1,7 +1,7 @@
 /**
- * web-view 地址改写：setup 注册的规则要落到真正加载的地址上（iframe 内嵌模式）
+ * web-view 地址改写：setup 注册的规则要落到真正加载的地址上
  *
- * 新窗口模式的改写走同一套规则，窗口本身要真浏览器，由 tests/e2e/webView.test.ts 覆盖。
+ * iframe 内嵌和新窗口两种模式的接口都在这里测；新窗口真正打开网页要真浏览器，由 tests/e2e/webView.test.ts 覆盖。
  */
 
 import { describe, expect, it } from 'vitest';

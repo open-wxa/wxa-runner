@@ -142,7 +142,7 @@ export interface SetupApi {
   mock<K extends string>(api: K, impl: K extends keyof KnownMocks ? NonNullable<KnownMocks[K]> : MockValue): void;
   /** 与 network.routes 相同，后添加的规则优先 */
   route(pattern: string, handler: RouteHandler): void;
-  /** 与 webView.rewriteUrl 相同，后添加的规则优先 */
+  /** 与 webView.rewriteUrl 相同；多条规则按添加顺序依次执行，后添加的拿到前面的结果 */
   rewriteWebViewUrl(rewrite: WebViewUrlRewrite): void;
   /** 经开发服务器代理发请求，没有跨域限制 */
   fetch(url: string, init?: { method?: string; header?: Record<string, string>; body?: string }): Promise<Response>;
