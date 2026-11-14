@@ -2,7 +2,7 @@
  * 生成基础库读取的 __wxConfig，字段与开发者工具保持一致
  */
 
-import { AppJson, UnitJson } from './MiniProgram';
+import { AppJson, ExtJson, UnitJson } from './MiniProgram';
 
 export const DEFAULT_WINDOW = {
   navigationBarBackgroundColor: '#000000',
@@ -20,10 +20,12 @@ export interface WxConfigInput {
   unitJson: Map<string, UnitJson>;
   appid: string;
   subPackages: NonNullable<AppJson['subPackages']>;
+  /** 生效的 ext.json（三方平台代开发），没有时不影响输出 */
+  extJson?: ExtJson | null;
 }
 
 export function createWxConfig(input: WxConfigInput): Record<string, any> {
-  const { app, pages, unitJson, appid } = input;
+  const { app, pages, unitJson, appid, extJson } = input;
   const entryPage = app.entryPagePath || app.pages[0];
 
   const page: Record<string, any> = {};
@@ -49,8 +51,11 @@ export function createWxConfig(input: WxConfigInput): Record<string, any> {
     global: { window: { ...DEFAULT_WINDOW, ...app.window } },
     page,
     networkTimeout: { request: 60000, uploadFile: 60000, connectSocket: 60000, downloadFile: 60000, ...app.networkTimeout },
-    ext: app.ext || {},
-    extAppid: app.extAppid || '',
+    // 三方平台代开发：基础库的 wx.getExtConfig / getExtConfigSync 直接读这两个字段，
+    // 所以 ext.json 必须在这里合并，和开发者工具一致
+    ext: extJson?.ext || app.ext || {},
+    extAppid: extJson?.extAppid || app.extAppid || '',
+    extEnable: !!extJson,
     plugins: app.plugins || {},
     mainPlugins: { ...app.plugins },
     useExtendedLib: app.useExtendedLib || {},

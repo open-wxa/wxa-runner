@@ -28,13 +28,27 @@ const FORWARDED_WX_DATA_APIS = ['webapi_servicemarket_jsapi_comm'];
 /**
  * @param findTicket 每次请求都重新查找：开发者工具重新登录、切换账号后不用重启服务器
  * @param loginCode 微信后台不给这个 appid 取 ticket 时，wx.login 退回让开发者工具的模拟器自己调。手机号等没有这条路
+ * @param options simulatorLogin 为 true 时（三方平台代开发）先向模拟器要 code：模拟器按 ext.json 的 extAppid 运行，
+ *   拿到的 code 属于授权方；开发者工具 jslogin 产出的 code 属于项目 appid，后端换不了授权方的登录态
  */
-export function devtoolsLoginRouter(appid: string, findTicket: FindTicket = findDeveloperTicket, loginCode?: (() => Promise<string>) | null): Router {
+export function devtoolsLoginRouter(
+  appid: string,
+  findTicket: FindTicket = findDeveloperTicket,
+  loginCode?: (() => Promise<string>) | null,
+  options: { simulatorLogin?: boolean } = {}
+): Router {
   const wechat = new WechatDevClient(appid, findTicket);
   const router = express.Router();
   router.use(onlyLoopback);
 
   router.post('/login', respond(async () => {
+    if (loginCode && options.simulatorLogin) {
+      try {
+        return { code: await loginCode() };
+      } catch {
+        // 模拟器还没打开页面时退回 jslogin，由它报出原因
+      }
+    }
     try {
       const body = requireOk(await wechat.postJson('wxa-dev-logic/jslogin', { scope: ['snsapi_base'] }), '微信登录失败');
       if (!body.code) throw new Error('微信登录失败：微信没有返回 code');

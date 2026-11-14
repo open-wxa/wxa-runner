@@ -181,9 +181,22 @@ export class DevServer {
       this.logger.warn(`[wxa-runner] 基础库 ${this.baseLib.version} 高于已验证的版本范围，可能无法正常运行`);
     }
     this.devtoolsLogin = options.devtoolsLogin === true;
-    this.devtools = this.devtoolsLogin ? devtoolsSession(this.project.projectPath, this.logger) : null;
+    // 有生效的 ext.json 就是三方平台代开发：运行时 appid 用授权方，登录、插件、账号信息都跟着走
+    if (this.project.activeExtJson()) {
+      const projectAppid = this.project.appid;
+      this.logger.log(
+        `[wxa-runner] 三方平台代开发模式（ext.json）：运行时 appid ${this.project.runtimeAppid}` +
+          (this.project.runtimeAppid === projectAppid ? '' : `，项目 appid ${projectAppid}`)
+      );
+    }
+    // 直接复用开发者工具里已打开的那个项目：三方平台代开发的项目 appid 是服务商的模板 appid，
+    // 模拟器按 ext.json 的 extAppid 运行，它自己调 wx.login 拿到的 code 就属于授权方；
+    // 反过来用服务商账号新建 appid 为授权方的项目，开发者工具会以「登录用户不是该小程序的开发者」拒绝
+    this.devtools = this.devtoolsLogin
+      ? devtoolsSession(this.project.projectPath, this.logger, { simulatorLogin: this.project.activeExtJson() !== null })
+      : null;
     this.ticketSource = this.devtools?.findTicket ?? null;
-    this.plugins = new PluginStore(this.ticketSource && new WechatDevClient(this.project.appid, this.ticketSource), this.logger);
+    this.plugins = new PluginStore(this.ticketSource && new WechatDevClient(this.project.runtimeAppid, this.ticketSource), this.logger);
     this.device = { ...DEFAULT_DEVICE, ...options.device };
     this.builder = new AppBuilder(this.project, { wxmlTransform: extended.wxmlTransform });
     this.setupFile = resolveSetupFile(options.setup, this.project.projectPath);
@@ -303,7 +316,7 @@ export class DevServer {
     app.get('/__wxa__/app-info.json', async (_req, res) => {
       noStore(res);
       const base = {
-        appid: this.project.appid,
+        appid: this.project.runtimeAppid,
         baseLibVersion: this.baseLib.version,
         device: this.device,
         pageTransition: this.options.pageTransition ?? false,
@@ -467,7 +480,17 @@ export class DevServer {
       }
     });
 
-    if (this.devtools) app.use('/__wxa__/api', devtoolsLoginRouter(this.project.appid, this.devtools.findTicket, this.devtools.loginCode));
+    // 登录票据属于开发者工具当前登录的账号和它打开的项目（project.config.json 的 appid）。
+    // 三方平台代开发时项目 appid 是服务商模板 appid，jslogin 产出的 code 属于它，换不了授权方的登录态，
+    // 所以让开发者工具的模拟器自己调 wx.login（按 ext.json 的 extAppid 出 code）；ticket 仍按项目 appid 取
+    if (this.devtools) {
+      app.use(
+        '/__wxa__/api',
+        devtoolsLoginRouter(this.project.appid, this.devtools.findTicket, this.devtools.loginCode, {
+          simulatorLogin: this.project.activeExtJson() !== null
+        })
+      );
+    }
 
     // 渲染层页面路径下的相对资源（如 ../../images/a.png）
     app.use('/__wxa__/webview', express.static(root));

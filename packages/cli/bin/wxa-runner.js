@@ -87,6 +87,9 @@ program
       console.log(`  控制台    ${describeForwardConsole(forward)}`);
       if (configFile) console.log(`  配置      ${configFile}`);
       console.log(`  项目      ${server.project.root}`);
+      if (server.project.activeExtJson()) {
+        console.log(`  模式      ${chalk.cyan('三方平台代开发')}（ext.json，授权方 ${server.project.runtimeAppid}）`);
+      }
       console.log(`  基础库    ${server.baseLib.version}${server.baseLib.source === 'bundled' ? '（内置）' : ''}`);
       if (server.setupFile) console.log(`  setup     ${server.setupFile}`);
       console.log('');

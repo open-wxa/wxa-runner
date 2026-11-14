@@ -59,7 +59,7 @@ export async function createPack(options: CreatePackOptions): Promise<CreatePack
       format: PACK_FORMAT,
       generator: `wxa-viewer@${version}`,
       createdAt: new Date().toISOString(),
-      appid: project.appid,
+      appid: project.runtimeAppid,
       baseLib: { version: baseLib.version, hasWorker: fs.existsSync(path.join(baseLib.dir, 'WAWorker.js')) },
       isolated: usesIsolatedContext(baseLib.version),
       build: {

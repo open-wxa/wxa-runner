@@ -173,10 +173,13 @@ export class AppBuilder {
     this.dirty.clear();
 
     try {
-      const app = this.project.readAppJson();
+      // 三方平台代开发：ext.json 由微信客户端合并到 app.json，这里做同样的处理
+      const extJson = this.project.activeExtJson();
+      const app = this.project.applyExtJson(this.project.readAppJson());
       const { pages, components } = this.project.collectUnits(app);
       const units = [...components, ...pages];
       const unitJson = new Map(units.map(id => [id, this.project.readUnitJson(id, app)]));
+      this.project.applyExtPages(unitJson);
 
       const [wxml, wxss] = await Promise.all([
         dirty.has('wxml') || !this.wxmlCache ? this.compileTemplates(units, unitJson) : this.wxmlCache,
@@ -199,8 +202,9 @@ export class AppBuilder {
           app,
           pages,
           unitJson,
-          appid: this.project.appid,
-          subPackages: this.project.subPackages(app)
+          appid: this.project.runtimeAppid,
+          subPackages: this.project.subPackages(app),
+          extJson
         }),
         modules,
         workerModules: scripts.filter(inWorkers),
