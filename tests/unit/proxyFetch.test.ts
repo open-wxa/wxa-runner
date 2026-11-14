@@ -94,6 +94,16 @@ describe('Fetch 代理', () => {
     ]);
   });
 
+  it('代理把多条 cookie 拼成微信那样的 Set-Cookie 响应头', async () => {
+    const headers = new Headers();
+    headers.append('set-cookie', 'a=1; Path=/');
+    headers.append('set-cookie', 'b=2; Path=/');
+    const response = await proxyFetch(request(), { fetch: async () => new Response('ok', { headers }) });
+    const header = JSON.parse(decodeURIComponent(response.headers.get('x-wxa-headers')!));
+    expect(header['Set-Cookie']).toBe('a=1; Path=/, b=2; Path=/');
+    expect(header['set-cookie']).toBe('a=1; Path=/, b=2; Path=/');
+  });
+
   it('代理在上游尚未结束时返回首块数据，并传递后续流错误', async () => {
     let controller!: ReadableStreamDefaultController<Uint8Array>;
     const body = new ReadableStream<Uint8Array>({
