@@ -100,7 +100,9 @@ pnpm docs:preview  # 预览构建结果
    `test:`、`docs:`、`chore:`、`ci:`、`refactor:` 不进 CHANGELOG，只有这些提交时不发版
 2. 推送到 main 后，release.yml 开一个（或更新已有的）发布 PR「chore: release x.y.z」，6 个 package.json 的版本号和 CHANGELOG
    都已改好。合并前可以直接在这个 PR 里修改 CHANGELOG 的措辞，想攒几个改动一起发就先不合并
-3. 合并发布 PR 后，release.yml 打 tag `vx.y.z`、建 GitHub Release，跑一遍 CI，再执行 `node scripts/release.mjs` 发布到 npm
+3. 合并发布 PR 后，release.yml 打 tag `vx.y.z`、建 GitHub Release，跑一遍 CI，再执行 `node scripts/release.mjs` 发布到 npm；
+   同时执行 `node scripts/release-contributors.mjs`，在 Release 末尾列出这个版本所有提交的作者（@用户名），发布页显示 Contributors 头像栏。
+   想单独致谢某个人，在发布 PR 的描述（Release 的说明取自它）和 CHANGELOG 里写纯文本的 `@用户名`，写成链接 GitHub 不识别
 
 - release.mjs：打包、在新目录里安装试跑、按依赖顺序发布。版本号与 tag 不一致时直接失败；npm 上已有的版本会跳过，
   中途失败后在 Actions 里重跑失败的 job 即可
