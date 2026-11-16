@@ -1,5 +1,18 @@
 # 更新日志
 
+## [0.14.0](https://github.com/open-wxa/wxa-runner/compare/v0.13.1...v0.14.0) (2026-11-16)
+
+
+### 新功能
+
+* web-view 支持在加载前改写地址 ([#130](https://github.com/open-wxa/wxa-runner/issues/130)) ([0de9ffe](https://github.com/open-wxa/wxa-runner/commit/0de9ffe643a4d4fcaf6360c83584bcbb0fd9b6ce))
+* 支持三方平台代开发（ext.json），wx.login 按授权方取 code ([#129](https://github.com/open-wxa/wxa-runner/issues/129)) ([a760ed4](https://github.com/open-wxa/wxa-runner/commit/a760ed49d8e1e9f17593ce83dfd93720cdd0778f))
+
+
+### 问题修复
+
+* **core:** 向小程序暴露 Set-Cookie 响应头 ([#128](https://github.com/open-wxa/wxa-runner/issues/128)) ([38a75bd](https://github.com/open-wxa/wxa-runner/commit/38a75bd6305aaf6b41ab602f1a38a23d6f165601))
+
 ## [0.13.1](https://github.com/open-wxa/wxa-runner/compare/v0.13.0...v0.13.1) (2026-11-12)
 
 
