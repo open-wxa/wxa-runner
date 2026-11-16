@@ -315,8 +315,8 @@ export class DevServer {
 
     app.get('/__wxa__/app-info.json', async (_req, res) => {
       noStore(res);
-      const base = {
-        appid: this.project.runtimeAppid,
+      // runtimeAppid 会读 ext.json，编辑时存了半成品会抛错：放进 try 里，别让请求挂住
+      const common = {
         baseLibVersion: this.baseLib.version,
         device: this.device,
         pageTransition: this.options.pageTransition ?? false,
@@ -328,11 +328,17 @@ export class DevServer {
       try {
         // 宿主打开小程序时先取 app-info：这时重新决定用哪些插件，之后的请求都按这个结果
         const build = await this.plugins.refresh(await this.builder.build());
-        const info: AppInfo = { ...base, version: build.version, wxConfig: build.wxConfig, pages: build.pages };
+        const info: AppInfo = {
+          ...common,
+          appid: this.project.runtimeAppid,
+          version: build.version,
+          wxConfig: build.wxConfig,
+          pages: build.pages
+        };
         if (this.setupFile) info.setup = await this.setupInfo(this.setupFile);
         res.json(info);
       } catch (error) {
-        res.json({ ...base, version: 0, wxConfig: {}, pages: [], buildError: (error as Error).message });
+        res.json({ ...common, appid: this.project.appid, version: 0, wxConfig: {}, pages: [], buildError: (error as Error).message });
       }
     });
 

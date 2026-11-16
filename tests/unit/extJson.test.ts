@@ -75,7 +75,16 @@ describe('ext.json（三方平台代开发）', () => {
     expect(buildConfig(program.projectPath).ext).toEqual({});
   });
 
-  it('ext.json 只合并 app.json 允许覆盖的字段，自定义映射不会污染小程序配置', () => {
+  it('extEnable 没写时按不启用处理，与微信文档的必填约定一致', () => {
+    const program = new MiniProgram(project({
+      'ext.json': { extAppid: EXT_APPID, ext: { a: 1 } }
+    }));
+    expect(program.activeExtJson()).toBeNull();
+    expect(program.runtimeAppid).toBe(APPID);
+    expect(buildConfig(program.projectPath).ext).toEqual({});
+  });
+
+  it('ext.json 只合并 app.json 允许覆盖的字段，自定义配置不会污染小程序配置', () => {
     const program = new MiniProgram(project({
       'ext.json': {
         extEnable: true,
@@ -90,7 +99,7 @@ describe('ext.json（三方平台代开发）', () => {
     const app = program.applyExtJson(program.readAppJson());
     expect(app.window).toEqual({ navigationBarTitleText: '代开发标题' });
     expect(app.tabBar?.list[0].pagePath).toBe('pages/a/a');
-    expect(app.自定义映射).toBeUndefined();
+    expect(app.自定义配置).toBeUndefined();
   });
 
   it('extPages 覆盖指定页面的配置', () => {

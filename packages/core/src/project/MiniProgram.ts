@@ -91,10 +91,13 @@ export class MiniProgram {
     return json;
   }
 
-  /** 生效的 ext.json：extEnable 为 false 时不启用，与微信客户端一致 */
+  /**
+   * 生效的 ext.json：只有 extEnable 为 true 才启用，与微信文档一致（extEnable 必填、为 true 时生效）。
+   * 没写 extEnable 时按不启用处理，和开发者工具的布尔判断一致
+   */
   activeExtJson(): ExtJson | null {
     const ext = this.readExtJson();
-    return ext && ext.extEnable !== false ? ext : null;
+    return ext && ext.extEnable === true ? ext : null;
   }
 
   /**

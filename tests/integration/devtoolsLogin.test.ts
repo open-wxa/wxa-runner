@@ -259,14 +259,15 @@ describe('三方平台代开发（ext.json）时的 wx.login', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('模拟器还没打开页面时退回 jslogin，原因照旧报出来', async () => {
+  it('模拟器失败时直接报错，jslogin 可用也不退回（它的 code 属于模板 appid）', async () => {
     simulator = async () => {
       throw new Error('微信开发者工具里找不到项目窗口');
     };
-    stubWechat({ baseresponse: { errcode: 40029, errmsg: 'invalid ticket' } });
+    const fetchMock = stubWechat({ baseresponse: { errcode: 0 }, code: 'code-from-jslogin' });
 
     const { status, body } = await postOn(extPort, '/login');
     expect(status).toBe(500);
-    expect(body.error).toContain('40029');
+    expect(body.error).toContain('项目窗口');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
