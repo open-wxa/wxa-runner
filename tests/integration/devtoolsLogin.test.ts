@@ -50,9 +50,13 @@ afterEach(() => {
 });
 
 function post(path: string, headers: Record<string, string> = {}, json?: object): Promise<{ status: number; body: any }> {
+  return postOn(port, path, headers, json);
+}
+
+function postOn(targetPort: number, path: string, headers: Record<string, string> = {}, json?: object): Promise<{ status: number; body: any }> {
   return new Promise((resolve, reject) => {
     const allHeaders = json ? { 'content-type': 'application/json', ...headers } : headers;
-    const req = http.request({ host: '127.0.0.1', port, path: `/__wxa__/api${path}`, method: 'POST', headers: allHeaders }, res => {
+    const req = http.request({ host: '127.0.0.1', port: targetPort, path: `/__wxa__/api${path}`, method: 'POST', headers: allHeaders }, res => {
       let text = '';
       res.on('data', chunk => (text += chunk));
       res.on('end', () => resolve({ status: res.statusCode!, body: JSON.parse(text) }));
@@ -223,5 +227,47 @@ describe('开发者工具登录态的接口', () => {
 
   it('开发者 ticket 的环境变量不会随 setup 下发给浏览器', () => {
     expect(collectSetupEnv({ [TICKET_ENV]: 'secret', WXA_NAME: 'dev' })).toEqual({ WXA_NAME: 'dev' });
+  });
+});
+
+describe('三方平台代开发（ext.json）时的 wx.login', () => {
+  // 项目 appid 是服务商的模板 appid，模拟器按 ext.json 的 extAppid 运行：jslogin 的 code 属于模板 appid，换不了授权方登录态
+  let extServer: http.Server;
+  let extPort = 0;
+  let simulator: () => Promise<string>;
+
+  beforeAll(async () => {
+    const app = express();
+    app.use(
+      '/__wxa__/api',
+      devtoolsLoginRouter('wx-template', () => ({ newticket: 't', expiredAt: LATER }), () => simulator(), { simulatorLogin: true })
+    );
+    extServer = app.listen(0, '127.0.0.1');
+    await new Promise(resolve => extServer.once('listening', resolve));
+    extPort = (extServer.address() as AddressInfo).port;
+  });
+
+  afterAll(() => {
+    extServer.close();
+  });
+
+  it('先让开发者工具的模拟器自己调 wx.login，不去问微信 jslogin', async () => {
+    simulator = async () => 'code-from-simulator';
+    const fetchMock = stubWechat({ baseresponse: { errcode: 0 }, code: 'code-from-jslogin' });
+
+    expect(await postOn(extPort, '/login')).toEqual({ status: 200, body: { code: 'code-from-simulator' } });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('模拟器失败时直接报错，jslogin 可用也不退回（它的 code 属于模板 appid）', async () => {
+    simulator = async () => {
+      throw new Error('微信开发者工具里找不到项目窗口');
+    };
+    const fetchMock = stubWechat({ baseresponse: { errcode: 0 }, code: 'code-from-jslogin' });
+
+    const { status, body } = await postOn(extPort, '/login');
+    expect(status).toBe(500);
+    expect(body.error).toContain('项目窗口');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

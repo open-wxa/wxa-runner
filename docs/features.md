@@ -41,11 +41,30 @@ wxa-runner 用来本地调试和跑自动化测试，发布相关的事仍然在
 | 媒体 | chooseImage、chooseMedia（图片和视频）、chooseVideo 由浏览器选文件，previewImage、getImageInfo，保存到相册即下载；InnerAudioContext 播放音频 |
 | 网络 | request、上传、下载由开发服务器转发（没有跨域限制）；WebSocket 经开发服务器转发，支持自定义请求头、子协议和二进制消息 |
 | 存储 | Storage、FileSystemManager 基本操作 |
+| 三方平台代开发 | 自动读取并合并 `ext.json`，运行时 appid、`wx.getExtConfig`、`getAccountInfoSync` 按授权方，见下文 |
 | 登录、用户信息等开放接口 | 返回固定的假数据，支付、扫码默认失败，[默认返回什么](./setup.md#mock)。可以用 setup mock，或用[借用开发者工具登录态](./devtools-login.md)拿真实的 code。服务市场 `wx.serviceMarket` 要加 `--devtools-login` 才能调用，见[服务市场](./devtools-login.md#服务市场) |
 
 基础库已验证 2.32.3、3.3.4、3.5.8、3.7.0；3.7.1 和 3.8.8 上全部测试也通过，但默认不会选用，见下文。
 
 开发服务器会转发 `wx.connectSocket({ header })` 中的鉴权头；上游握手成功后才触发 `onOpen`，失败触发 `onError` / `onClose`。请求头通过同源连接的首帧传递，不放入 URL。静态查看器没有此代理，仍使用浏览器直连，不能携带自定义请求头。
+
+## 三方平台代开发（ext.json）
+
+项目根目录（`project.config.json` 的 `miniprogramRoot` 下）有 `ext.json`、且 `extEnable` 为 `true` 时，wxa-runner 自动按微信客户端的规则进入代开发模式，不用额外配置：
+
+- **合并配置**：`ext`、`extAppid`、`extPages` 以及 `window`、`tabBar`、`networkTimeout`、`plugins`、`debug`、`permission`、`requiredPrivateInfos`、`resizable` 会合并进 `app.json`；其他自定义字段不会进入小程序配置
+- **运行时 appid**：用 `extAppid`（授权方），`wx.getAccountInfoSync()`、Storage 隔离、页面栈恢复都以它为准
+- **ext 配置**：`wx.getExtConfig` / `wx.getExtConfigSync` 直接返回 `ext.json` 的 `ext`，这是基础库从 `__wxConfig` 读的，不需要 setup mock
+- **启动日志**：终端会打印「三方平台代开发模式（ext.json）：运行时 appid …」，命令行启动信息里也有「模式」一行
+
+没有 `ext.json`、或 `extEnable` 不是 `true`（微信文档标注必填、为 `true` 才生效）时按普通小程序运行，使用 `project.config.json` 的 appid，行为与之前一致。
+
+`--devtools-login` 在代开发模式下的取法：
+
+- **wx.login 的 code 由开发者工具的模拟器自己出**：wxa-runner 直接复用它已经打开的那个项目（项目 appid 是服务商的模板 appid），模拟器按 `ext.json` 的 `extAppid` 运行，`wx.login` 拿到的 code 就属于授权方。所以登录开发者工具的账号只要有模板小程序的开发权限即可，不需要是授权方小程序的成员
+- **不去新建授权方项目**：用服务商账号新建 appid 为 `extAppid` 的项目，开发者工具会以「登录用户不是该小程序的开发者」拒绝
+- **ticket 仍按项目 appid 取**：手机号、服务市场、插件校验走项目 appid 的票据，在模板 appid 下可能被微信拒（`TicketNotAllowed`），此时启动日志会说明只有 `wx.login` 能用。手机号拿到的 code 属于项目 appid，授权方后端一般换不了，请改用 setup mock，或用环境变量 `WECHAT_DEV_TICKET` 传一张能用的票据
+- **插件代码下载用运行时 appid**：`getplugincode` 按 `extAppid` 取脚本包；插件校验（`verify-plugin`）和插件信息（`batch-get-contact`）仍按项目 appid，与 ticket 保持一致。代开发模式下这个插件要先授权给授权方（`extAppid`），否则下载会被微信拒绝（`-80002`）
 
 ## less / sass
 

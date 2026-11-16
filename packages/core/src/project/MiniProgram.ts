@@ -34,9 +34,33 @@ export interface UnitJson {
   [key: string]: any;
 }
 
+/**
+ * ext.json：第三方平台代开发时由微信客户端（开发者工具）合并到 app.json 的配置。
+ * 文档：https://developers.weixin.qq.com/miniprogram/dev/devtools/ext.html
+ */
+export interface ExtJson {
+  /** false 时不启用，其余字段忽略；缺省视为启用 */
+  extEnable?: boolean;
+  /** 授权方小程序的 appid，启用时代替 project.config.json 的 appid 作为运行时 appid */
+  extAppid?: string;
+  /** 第三方平台自定义的数据，wx.getExtConfig / wx.getExtConfigSync 返回它 */
+  ext?: Record<string, any>;
+  /** 覆盖指定页面的配置（通常只有 window），不能新增页面 */
+  extPages?: Record<string, Record<string, any>>;
+  [key: string]: any;
+}
+
+/**
+ * ext.json 中能覆盖 app.json 的字段，与微信客户端一致。
+ * 其余字段（代开发模板自己的自定义配置）不会合并进小程序配置
+ */
+const EXT_APP_FIELDS = [
+  'window', 'tabBar', 'networkTimeout', 'plugins', 'debug', 'permission', 'requiredPrivateInfos', 'resizable'
+] as const;
+
 const IGNORED_DIRS = new Set(['node_modules', '.git', '.idea', '.vscode']);
 // wxa.setup.js 是 wxa-runner 的启动前脚本，不属于小程序
-const PROJECT_FILES = new Set(['project.config.json', 'project.private.config.json', 'sitemap.json', 'app.json', 'wxa.setup.js']);
+const PROJECT_FILES = new Set(['project.config.json', 'project.private.config.json', 'sitemap.json', 'app.json', 'ext.json', 'wxa.setup.js']);
 
 export class MiniProgram {
   /** 小程序代码根目录（已考虑 project.config.json 的 miniprogramRoot） */
@@ -56,6 +80,53 @@ export class MiniProgram {
   /** project.config.json 里与 less / sass 编译插件有关的设置；每次重新读取，开发中修改了也能生效 */
   get styleSetting(): StyleSetting {
     return readStyleSetting(readJsonFile(path.join(this.projectPath, 'project.config.json'))?.setting);
+  }
+
+  /** ext.json 的原始内容；没有这个文件时为 null */
+  readExtJson(): ExtJson | null {
+    const file = path.join(this.root, 'ext.json');
+    if (!fs.existsSync(file)) return null;
+    const json = readJsonFile(file);
+    if (!json) throw new Error(`${file} 不是合法的 JSON`);
+    return json;
+  }
+
+  /**
+   * 生效的 ext.json：只有 extEnable 为 true 才启用，与微信文档一致（extEnable 必填、为 true 时生效）。
+   * 没写 extEnable 时按不启用处理，和开发者工具的布尔判断一致
+   */
+  activeExtJson(): ExtJson | null {
+    const ext = this.readExtJson();
+    return ext && ext.extEnable === true ? ext : null;
+  }
+
+  /**
+   * 运行时 appid：第三方平台代开发时以 ext.json 的 extAppid（授权方小程序）为准，
+   * 与开发者工具在代开发项目里的行为一致；其余情况用 project.config.json 的 appid
+   */
+  get runtimeAppid(): string {
+    return this.activeExtJson()?.extAppid || this.appid;
+  }
+
+  /** 按 ext.json 覆盖 app.json 中允许覆盖的字段；没启用时原样返回 */
+  applyExtJson(app: AppJson): AppJson {
+    const ext = this.activeExtJson();
+    if (!ext) return app;
+    const merged: AppJson = { ...app };
+    for (const field of EXT_APP_FIELDS) {
+      if (ext[field] !== undefined) merged[field] = ext[field];
+    }
+    return merged;
+  }
+
+  /** ext.json 的 extPages：按微信客户端的规则直接覆盖指定页面的配置，不接受新增页面 */
+  applyExtPages(unitJson: Map<string, UnitJson>): void {
+    const extPages = this.activeExtJson()?.extPages;
+    if (!extPages) return;
+    for (const [id, override] of Object.entries(extPages)) {
+      const current = unitJson.get(id);
+      if (current && override && typeof override === 'object') unitJson.set(id, { ...current, ...override });
+    }
   }
 
   readAppJson(): AppJson {

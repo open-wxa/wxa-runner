@@ -9,6 +9,10 @@
  *
  * 能不能取 ticket 由微信后台按 appid 下发，没开的 appid 在开发者工具里也看不到那个设置项。
  * 这时 wx.login 还有一条路：自动化协议的 App.callWxMethod 不查这道白名单，让模拟器自己调 wx.login 取 code。
+ *
+ * 三方平台代开发（有 ext.json）时用开发者工具里已经打开的那个项目，不另建项目：项目 appid 是服务商的模板 appid，
+ * 模拟器按 ext.json 的 extAppid 运行，模拟器自己调 wx.login 拿到的 code 就属于授权方；借服务商账号新建授权方项目
+ * 反而会被开发者工具以「登录用户不是该小程序的开发者」拒绝。
  */
 
 import { execFile } from 'child_process';
@@ -42,12 +46,21 @@ export interface DevtoolsSession {
   loginCode: (() => Promise<string>) | null;
 }
 
+export interface DevtoolsSessionOptions {
+  /**
+   * 三方平台代开发（有生效的 ext.json）：wx.login 一律让模拟器出 code，不用 jslogin。
+   * 项目 appid 是服务商的模板 appid，jslogin 产出的 code 换不了授权方的登录态
+   */
+  simulatorLogin?: boolean;
+}
+
 /**
  * @param projectPath 项目目录（project.config.json 所在目录），开发者工具为它开启自动化接口，项目窗口没开时会打开
  * @param logger 开启自动化接口时告诉用户，因为开发者工具里可能多出一个项目窗口
+ * @param options simulatorLogin 为 true 时只提示模拟器取 code，不再提票据
  * @returns 取不到时抛错，消息是给用户看的原因和处理办法
  */
-export function devtoolsSession(projectPath: string, logger: Pick<Console, 'log'>): DevtoolsSession {
+export function devtoolsSession(projectPath: string, logger: Pick<Console, 'log'>, options: DevtoolsSessionOptions = {}): DevtoolsSession {
   const cli = findElectronDevtoolsCli();
   if (!cli) return { findTicket: async () => findDeveloperTicket(), loginCode: null };
 
@@ -91,8 +104,11 @@ export function devtoolsSession(projectPath: string, logger: Pick<Console, 'log'
       if (!loginCodeNoticed) {
         loginCodeNoticed = true;
         logger.log(
-          '[wxa-runner] --devtools-login：微信后台不给这个 appid 取登录票据，wx.login 的 code 改由开发者工具的模拟器获取；' +
-            '手机号、服务市场和插件没有这条路，调用时会失败'
+          options.simulatorLogin
+            ? '[wxa-runner] --devtools-login：三方平台代开发，wx.login 的 code 由开发者工具的模拟器自己调（按 ext.json 的 extAppid，属于授权方）；' +
+                '手机号、服务市场和插件仍走 ticket，在这个 appid 下可能取不到'
+            : '[wxa-runner] --devtools-login：微信后台不给这个 appid 取登录票据，wx.login 的 code 改由开发者工具的模拟器获取；' +
+                '手机号、服务市场和插件没有这条路，调用时会失败'
         );
       }
       return code;
